@@ -1,12 +1,17 @@
 # container-pi
 
 ```text
-┌──────────────────────┐        _
-│  /workspace          │  _ __ (_)
-│  container session   │ | '_ \| |
-│  tmux + pi           │ | |_) | |
-└──────────────────────┘ | .__/|_|
-                         |_|
+ _
+| |_ _ __ ___  _   ___  __
+| __| '_ ` _ \| | | \ \/ /
+| |_| | | | | | |_| |>  <
+ \__|_| |_| |_|\__,_/_/\_\
+              ^
+        _ __ (_)
+       | '_ \| |
+       | |_) | |
+       | .__/|_|
+       |_|
 ```
 
 Run [`pi`](https://github.com/badlogic/pi-mono) inside a per-project Linux container, with the selected workspace mounted at `/workspace` and the live Pi UI running inside `tmux`.
