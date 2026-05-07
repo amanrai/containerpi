@@ -636,13 +636,13 @@ function tui(reopenSessionName?: string) {
     screen.render();
   }
 
-  function ask(title: string, value: string, callback: (value: string) => void) {
+  function ask(title: string, value: string, callback: (value: string) => void, instruction = "Enter to accept, Esc cancels.") {
     const form = blessed.form({
       parent: box,
       top: "center",
       left: "center",
       width: "75%",
-      height: 9,
+      height: 11,
       keys: true,
       vi: true,
       border: "line",
@@ -653,12 +653,14 @@ function tui(reopenSessionName?: string) {
       parent: form,
       top: 0,
       left: 2,
-      content: "Enter to accept, Esc cancels.",
+      width: "95%",
+      height: 3,
+      content: instruction,
       style: { fg: "gray" },
     });
     const input = blessed.textbox({
       parent: form,
-      top: 2,
+      top: 4,
       left: 2,
       width: "95%",
       height: 3,
@@ -693,7 +695,7 @@ function tui(reopenSessionName?: string) {
       setWorktreeRoot(path);
       meta.setContent(statusLines().join("\n"));
       showMessage("worktree path saved", `Worktrees will be created under:\n${worktreeRoot()}`);
-    });
+    }, "This specifies the path on your base system where worktrees will be created and loaded into the container at /workspace. Enter to accept, Esc cancels.");
   }
 
   function showSessionActions(session: SessionInfo) {
