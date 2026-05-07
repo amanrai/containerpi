@@ -357,6 +357,12 @@ function safeWorktreeName(name: string) {
   return name.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "worktree";
 }
 
+function defaultWorktreeName() {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const d = new Date();
+  return `pi-session-on-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
 function defaultWorktreePath(projectDir: string, name: string) {
   return resolve(worktreeRoot(), basename(resolve(projectDir)), safeWorktreeName(name));
 }
@@ -733,7 +739,7 @@ function tui(reopenSessionName?: string) {
 
       const root = gitRepoRoot(projectDir);
       if (!root) return showMessage("not a git repo", "Worktree mode requires the selected folder to be inside a Git repository. Choose Yolo It to start directly in this folder.");
-      ask("worktree name", "agent/work", worktreeName => {
+      ask("worktree name", defaultWorktreeName(), worktreeName => {
         const worktreePath = defaultWorktreePath(projectDir, worktreeName);
         const name = newSessionName(worktreePath);
         leaveAnd(() => startWorktreeSession(root, worktreeName, worktreePath, name), true, name);
