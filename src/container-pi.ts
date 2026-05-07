@@ -421,8 +421,15 @@ function tui(reopenSessionName?: string) {
     left: 3,
     width: "95%",
     height: 7,
-    content: statusLines().join("\n"),
-    style: { fg: "white" },
+    content: [
+      "┌──────────────────────┐        _",
+      "│  /workspace          │  _ __ (_)",
+      "│  container session   │ | '_ \\| |",
+      "│  tmux + pi           │ | |_) | |",
+      "└──────────────────────┘ | .__/|_|",
+      "                         |_|",
+    ].join("\n"),
+    style: { fg: "cyan" },
   });
 
   const items = [
@@ -570,7 +577,6 @@ function tui(reopenSessionName?: string) {
   });
 
   function refresh() {
-    meta.setContent(statusLines().join("\n"));
     screen.render();
   }
 
@@ -697,7 +703,6 @@ function tui(reopenSessionName?: string) {
   function configureWorktreePath() {
     ask("configure worktree path", worktreeRoot(), path => {
       setWorktreeRoot(path);
-      meta.setContent(statusLines().join("\n"));
       showMessage("worktree path saved", `Worktrees will be created under:\n${worktreeRoot()}`);
     }, "This specifies the path on your base system where worktrees will be created and loaded into the container at /workspace. Enter to accept, Esc cancels.");
   }
