@@ -440,7 +440,7 @@ function tui(reopenSessionName?: string) {
     left: 3,
     width: "95%",
     height: 3,
-    content: "pi in a tmux in a container. Don't Panic.",
+    content: "Pi in tmux in a container. Worktrees supported out of the box.\nDon't Panic.",
     style: { fg: "cyan" },
   });
 
