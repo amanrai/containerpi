@@ -1,0 +1,17 @@
+{
+  "name": "container-pi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "container-pi": "tsx src/container-pi.ts",
+    "build-image": "tsx src/container-pi.ts build",
+    "rebuild-image": "tsx src/container-pi.ts rebuild"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}
