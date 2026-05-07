@@ -59,7 +59,7 @@ For bash, use `~/.bashrc` instead of `~/.zshrc`.
 ## Usage
 
 ```bash
-container-pi                  # open the TUI
+container-pi                  # open the TUI ("pi in a tmux in a container. Don't Panic.")
 container-pi tui              # open the TUI explicitly
 container-pi run              # start/attach the default project container
 container-pi attach           # attach to this project's container
