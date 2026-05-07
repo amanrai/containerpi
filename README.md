@@ -52,26 +52,26 @@ npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts
 
 ## Make `container-pi` available as a command
 
-Replace `/home/amanrai/Code/container-pi` with the path where you cloned this repo.
+Run these from inside the cloned `container-pi` repo. They capture the repo's current path with `pwd`, so there is no hardcoded install location.
 
 ### macOS/Linux, zsh
 
 ```bash
-echo "alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'" >> ~/.zshrc
+printf "alias container-pi='npx tsx %s/src/container-pi.ts'\n" "$(pwd)" >> ~/.zshrc
 source ~/.zshrc
 ```
 
 ### Linux, bash
 
 ```bash
-echo "alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'" >> ~/.bashrc
+printf "alias container-pi='npx tsx %s/src/container-pi.ts'\n" "$(pwd)" >> ~/.bashrc
 source ~/.bashrc
 ```
 
 ### Current shell only
 
 ```bash
-alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'
+alias container-pi="npx tsx $(pwd)/src/container-pi.ts"
 ```
 
 Then from any project:
