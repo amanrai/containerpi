@@ -11,7 +11,7 @@ Built with [Pi](https://pi.dev), but not associated with the Pi Coding Agent pro
 - Reuses your local agent auth/config from `~/.pi`, `~/.agents`, `~/.codex`, and `~/.claude`.
 - Keeps Pi running in `tmux`, so you can detach and reattach.
 - Includes `starship` in the container for Starship-powered Pi footers/prompts.
-- Configures container tmux with `tmux-256color`/RGB support for better prompt/footer rendering.
+- Configures container tmux with `tmux-256color`/RGB support and UTF-8 locale for better prompt/footer rendering.
 - Can create Git worktrees for isolated agent sessions.
 - Provides lifecycle hooks for project/global automation.
 
