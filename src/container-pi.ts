@@ -96,16 +96,27 @@ function mountArgs(): string[] {
   return args;
 }
 
-function attach() {
-  if (!containerRunning()) {
-    console.error(`No running container for ${resolve(cwd)} (${containerName})`);
+function attachContainer(name: string) {
+  const exists = run(engine, ["container", "inspect", name], { check: false, stdio: "ignore" }).status === 0;
+  if (!exists) {
+    console.error(`No such container: ${name}`);
     process.exit(1);
   }
+  const running = output(engine, ["inspect", "-f", "{{.State.Running}}", name]) === "true";
+  if (!running) run(engine, ["start", name]);
   run(engine, [
-    "exec", "-it", containerName,
+    "exec", "-it", name,
     "bash", "-lc",
     `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); exec gosu \"$u\" tmux -S ${tmuxSocket} attach -t ${tmuxSession}`
   ]);
+}
+
+function attach() {
+  if (!containerExists()) {
+    console.error(`No container for ${resolve(cwd)} (${containerName})`);
+    process.exit(1);
+  }
+  attachContainer(containerName);
 }
 
 function shell() {
@@ -168,11 +179,23 @@ function logs() {
   run(engine, ["logs", "-f", containerName]);
 }
 
-function listRunningText() {
-  const format = "table {{.Names}}\\t{{.Image}}\\t{{.Status}}";
-  const r = run(engine, ["ps", "--filter", "name=container-pi-", "--format", format], { capture: true, check: false });
+type SessionInfo = { name: string; image: string; status: string };
+
+function listSessions(): SessionInfo[] {
+  const format = "{{.Names}}\\t{{.Image}}\\t{{.Status}}";
+  const r = run(engine, ["ps", "-a", "--filter", "name=container-pi-", "--format", format], { capture: true, check: false });
   const text = r.status === 0 ? String(r.stdout).trim() : "";
-  return text || "No running container-pi containers.";
+  if (!text) return [];
+  return text.split("\n").map(line => {
+    const [name = "", image = "", status = ""] = line.split("\t");
+    return { name, image, status };
+  }).filter(s => s.name.startsWith("container-pi-"));
+}
+
+function listRunningText() {
+  const sessions = listSessions();
+  if (!sessions.length) return "No container-pi sessions.";
+  return ["NAMES                       IMAGE                 STATUS", ...sessions.map(s => `${s.name.padEnd(27)} ${s.image.padEnd(21)} ${s.status}`)].join("\n");
 }
 
 function listRunning() {
@@ -210,14 +233,12 @@ function tui() {
   });
 
   const items = [
-    "Start / attach pi",
-    "Attach tmux session",
+    "Start / attach session",
     "Open shell",
     "Stop/remove container",
     "Build image",
     "Rebuild image",
     "Follow logs",
-    "List running containers",
     "Refresh status",
     "Quit",
   ];
@@ -241,17 +262,23 @@ function tui() {
     },
   });
 
-  const message = blessed.message({
+  const sessionList = blessed.list({
     parent: box,
-    top: "center",
-    left: "center",
-    width: "80%",
-    height: "shrink",
-    border: "line",
-    label: " running container-pi sessions ",
+    top: 11,
+    left: "55%",
+    width: "42%",
+    height: 14,
     keys: true,
     mouse: true,
-    style: { border: { fg: "cyan" }, fg: "white", bg: "black" },
+    vi: true,
+    hidden: true,
+    border: "line",
+    label: " sessions ",
+    style: {
+      border: { fg: "cyan" },
+      selected: { bg: "blue", fg: "white", bold: true },
+      item: { fg: "white" },
+    },
   });
 
   const help = blessed.text({
@@ -273,18 +300,32 @@ function tui() {
     if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
   }
 
+  function showSessions() {
+    const sessions = listSessions();
+    const labels = ["+ New session for this project", ...sessions.map(s => `${s.name}  ${s.status}`)];
+    sessionList.setItems(labels);
+    sessionList.show();
+    sessionList.focus();
+    screen.render();
+
+    sessionList.removeAllListeners("select");
+    sessionList.on("select", (_item, index) => {
+      if (index === 0) return leaveAnd(() => start([]));
+      const session = sessions[index - 1];
+      if (session) leaveAnd(() => attachContainer(session.name));
+    });
+  }
+
   list.on("select", (_item, index) => {
     switch (index) {
-      case 0: leaveAnd(() => start([])); break;
-      case 1: leaveAnd(attach); break;
-      case 2: leaveAnd(shell); break;
-      case 3: stopContainer(); refresh(); break;
-      case 4: leaveAnd(() => buildImage(false)); break;
-      case 5: leaveAnd(() => buildImage(true)); break;
-      case 6: leaveAnd(logs); break;
-      case 7: message.display(listRunningText(), 0, () => { list.focus(); screen.render(); }); break;
-      case 8: refresh(); break;
-      case 9: screen.destroy(); process.exit(0);
+      case 0: showSessions(); break;
+      case 1: leaveAnd(shell); break;
+      case 2: stopContainer(); refresh(); break;
+      case 3: leaveAnd(() => buildImage(false)); break;
+      case 4: leaveAnd(() => buildImage(true)); break;
+      case 5: leaveAnd(logs); break;
+      case 6: refresh(); break;
+      case 7: screen.destroy(); process.exit(0);
     }
   });
 
