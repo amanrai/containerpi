@@ -63,6 +63,7 @@ container-pi shell            # open shell in same container
 container-pi stop             # remove project container
 container-pi status           # show image/container/project info
 container-pi logs             # follow container logs
+container-pi list             # list running container-pi containers
 container-pi build            # build image
 container-pi rebuild          # rebuild image with --no-cache
 ```

@@ -168,6 +168,17 @@ function logs() {
   run(engine, ["logs", "-f", containerName]);
 }
 
+function listRunningText() {
+  const format = "table {{.Names}}\\t{{.Image}}\\t{{.Status}}";
+  const r = run(engine, ["ps", "--filter", "name=container-pi-", "--format", format], { capture: true, check: false });
+  const text = r.status === 0 ? String(r.stdout).trim() : "";
+  return text || "No running container-pi containers.";
+}
+
+function listRunning() {
+  console.log(listRunningText());
+}
+
 function tui() {
   const screen = blessed.screen({ smartCSR: true, title: "container-pi" });
 
@@ -206,6 +217,7 @@ function tui() {
     "Build image",
     "Rebuild image",
     "Follow logs",
+    "List running containers",
     "Refresh status",
     "Quit",
   ];
@@ -227,6 +239,19 @@ function tui() {
       selected: { bg: "blue", fg: "white", bold: true },
       item: { fg: "white" },
     },
+  });
+
+  const message = blessed.message({
+    parent: box,
+    top: "center",
+    left: "center",
+    width: "80%",
+    height: "shrink",
+    border: "line",
+    label: " running container-pi sessions ",
+    keys: true,
+    mouse: true,
+    style: { border: { fg: "cyan" }, fg: "white", bg: "black" },
   });
 
   const help = blessed.text({
@@ -257,8 +282,9 @@ function tui() {
       case 4: leaveAnd(() => buildImage(false)); break;
       case 5: leaveAnd(() => buildImage(true)); break;
       case 6: leaveAnd(logs); break;
-      case 7: refresh(); break;
-      case 8: screen.destroy(); process.exit(0);
+      case 7: message.display(listRunningText(), 0, () => { list.focus(); screen.render(); }); break;
+      case 8: refresh(); break;
+      case 9: screen.destroy(); process.exit(0);
     }
   });
 
@@ -287,6 +313,7 @@ switch (cmd) {
   case "shell": shell(); break;
   case "stop": stopContainer(); break;
   case "logs": logs(); break;
+  case "list": listRunning(); break;
   case "status": status(); break;
   case "help":
   case "--help":
@@ -302,6 +329,7 @@ Usage:
   container-pi stop            Stop/remove this project container
   container-pi status          Show project container status
   container-pi logs            Follow container logs
+  container-pi list            List running container-pi containers
   container-pi build|rebuild   Build image
 
 Environment:
