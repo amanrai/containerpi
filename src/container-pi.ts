@@ -2,7 +2,7 @@
 import blessed from "blessed";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -18,11 +18,8 @@ const containerName = process.env.CONTAINER_PI_NAME || `container-pi-${projectHa
 const tmuxSocket = "/tmp/container-pi.tmux";
 const tmuxSession = "pi";
 const terminalEnv = ["-e", "TERM=xterm-256color", "-e", "COLORTERM=truecolor", "-e", "FORCE_COLOR=1"];
-const configDir = resolve(home, ".config", "container-pi");
-const settingsFile = resolve(configDir, "settings.json");
-const defaultWorktreeRoot = "/tmp/container-pi/worktrees";
+const defaultWorktreeRoot = resolve(home, ".container-pi", "worktrees");
 type HookName = "pre-load" | "session-attach" | "session-detach" | "shutdown";
-type Settings = { worktreeRoot?: string };
 
 function findEngine(): string {
   for (const candidate of ["docker", "podman"]) {
@@ -47,25 +44,16 @@ function output(cmd: string, args: string[]): string {
   return r.status === 0 ? String(r.stdout).trim() : "";
 }
 
-function loadSettings(): Settings {
-  try {
-    return JSON.parse(readFileSync(settingsFile, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function saveSettings(settings: Settings) {
-  mkdirSync(configDir, { recursive: true });
-  writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
-}
-
 function worktreeRoot() {
-  return process.env.CONTAINER_PI_WORKTREE_ROOT || loadSettings().worktreeRoot || defaultWorktreeRoot;
+  return process.env.CONTAINER_PI_WORKTREE_ROOT || defaultWorktreeRoot;
 }
 
-function setWorktreeRoot(path: string) {
-  saveSettings({ ...loadSettings(), worktreeRoot: resolve(path) });
+function pathExists(path: string) {
+  return !!path && existsSync(path);
+}
+
+function projectMissing(session: SessionInfo) {
+  return !pathExists(session.project);
 }
 
 function projectForContainer(name: string) {
@@ -349,12 +337,43 @@ function gitBranch(projectDir: string) {
   return gitOutput(projectDir, ["branch", "--show-current"]);
 }
 
-function isLinkedWorktree(projectDir: string) {
+function worktreePaths(projectDir: string) {
   const root = gitRepoRoot(projectDir);
-  if (!root) return false;
+  if (!root) return [];
   const text = gitOutput(root, ["worktree", "list", "--porcelain"]);
-  const worktrees = text.split("\n").filter(line => line.startsWith("worktree ")).map(line => resolve(line.slice("worktree ".length)));
-  return worktrees.length > 1 && resolve(root) !== worktrees[0];
+  return text.split("\n")
+    .filter(line => line.startsWith("worktree "))
+    .map(line => resolve(line.slice("worktree ".length)));
+}
+
+function mainWorktree(projectDir: string) {
+  return worktreePaths(projectDir)[0] || "";
+}
+
+function isLinkedWorktree(projectDir: string) {
+  const paths = worktreePaths(projectDir);
+  return paths.length > 1 && resolve(gitRepoRoot(projectDir)) !== paths[0];
+}
+
+function pruneWorktrees(projectDir = cwd) {
+  const root = gitRepoRoot(projectDir);
+  if (!root) {
+    console.error(`Not a Git repository: ${projectDir}`);
+    process.exit(1);
+  }
+  run("git", ["-C", root, "worktree", "prune"]);
+}
+
+function removeWorktreeAndSession(session: SessionInfo) {
+  const projectDir = session.project;
+  if (!projectDir || !existsSync(projectDir) || !isLinkedWorktree(projectDir)) {
+    stopContainerName(session.name);
+    return;
+  }
+  const main = mainWorktree(projectDir);
+  stopContainerName(session.name);
+  run("git", ["-C", main || projectDir, "worktree", "remove", projectDir]);
+  if (main) run("git", ["-C", main, "worktree", "prune"], { check: false });
 }
 
 function safeWorktreeName(name: string) {
@@ -434,8 +453,8 @@ function tui(reopenSessionName?: string) {
 
   const items = [
     "Sessions",
-    "Configure worktree path",
     "Configure hooks",
+    "Prune missing worktrees",
     "Build image",
     "Rebuild image",
     "Follow logs",
@@ -700,18 +719,14 @@ function tui(reopenSessionName?: string) {
     screen.render();
   }
 
-  function configureWorktreePath() {
-    ask("configure worktree path", worktreeRoot(), path => {
-      setWorktreeRoot(path);
-      showMessage("worktree path saved", `Worktrees will be created under:\n${worktreeRoot()}`);
-    }, "This specifies the path on your base system where worktrees will be created and loaded into the container at /workspace. Enter to accept, Esc cancels.");
-  }
-
   function showSessionActions(session: SessionInfo) {
-    const linkedWorktree = session.project ? isLinkedWorktree(session.project) : false;
-    const actions = linkedWorktree
-      ? ["Attach", "Generate PR", "Publish branch", "Stop/remove"]
-      : ["Attach", "Stop/remove"];
+    const missing = projectMissing(session);
+    const linkedWorktree = !missing && session.project ? isLinkedWorktree(session.project) : false;
+    const actions = missing
+      ? ["Remove stale session"]
+      : linkedWorktree
+        ? ["Attach", "Generate PR", "Publish branch", "Remove worktree + session", "Stop/remove"]
+        : ["Attach", "Stop/remove"];
     sessionActions.setItems(actions);
     sessionActions.height = actions.length + 2;
     sessionActions.show();
@@ -725,6 +740,8 @@ function tui(reopenSessionName?: string) {
         case "Attach": leaveAnd(() => attachContainer(session.name), true, session.name); break;
         case "Generate PR": leaveAnd(() => generatePr(session.project), true, session.name); break;
         case "Publish branch": leaveAnd(() => publishBranch(session.project), true, session.name); break;
+        case "Remove worktree + session": leaveAnd(() => removeWorktreeAndSession(session)); break;
+        case "Remove stale session":
         case "Stop/remove":
           stopContainerName(session.name);
           hideSessionActions();
@@ -812,7 +829,7 @@ function tui(reopenSessionName?: string) {
     const sessions = listSessions();
     const labels = [
       "+ New session",
-      ...sessions.map(s => `${displaySessionName(s.name)}  ${s.status}${s.project ? `  ${s.project}` : ""}`),
+      ...sessions.map(s => `${displaySessionName(s.name)}  ${projectMissing(s) ? "stale: missing worktree" : s.status}${s.project ? `  ${s.project}` : ""}`),
     ];
     sessionList.setItems(labels);
     sessionList.show();
@@ -836,8 +853,8 @@ function tui(reopenSessionName?: string) {
   list.on("select", (_item, index) => {
     switch (index) {
       case 0: showSessions(); break;
-      case 1: configureWorktreePath(); break;
-      case 2: showHookConfig(); break;
+      case 1: showHookConfig(); break;
+      case 2: leaveAnd(() => pruneWorktrees(cwd)); break;
       case 3: leaveAnd(() => buildImage(false)); break;
       case 4: leaveAnd(() => buildImage(true)); break;
       case 5: leaveAnd(logs); break;
@@ -922,7 +939,7 @@ Environment:
   CONTAINER_PI_IMAGE=container-pi:latest
   CONTAINER_PI_NAME=custom-name
   CONTAINER_PI_NO_TUI=1
-  CONTAINER_PI_WORKTREE_ROOT=/tmp/container-pi/worktrees
+  CONTAINER_PI_WORKTREE_ROOT=~/.container-pi/worktrees
 `);
     break;
   default:

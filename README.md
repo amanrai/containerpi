@@ -93,9 +93,9 @@ cd /path/to/project
 container-pi
 ```
 
-With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. New session opens a directory browser so you can choose the workspace, then asks whether to create a worktree or start directly in that folder. Worktree mode prompts for a worktree/branch name, creates it under `<configured-worktree-root>/<chosen-folder-name>/<worktree-name>`, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
+With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. New session opens a directory browser so you can choose the workspace, then asks whether to create a worktree or start directly in that folder. Worktree mode prompts for a worktree/branch name, creates it under `~/.container-pi/worktrees/<chosen-folder-name>/<worktree-name>`, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR**, **Publish branch**, and **Remove worktree + session**. Sessions whose workspace path is gone are shown as stale and can be removed from the submenu.
 
-Use **Configure worktree path** from the main menu to set where new worktrees are created. The default is `/tmp/container-pi/worktrees`.
+Use **Prune missing worktrees** from the main menu to run `git worktree prune` for the current repository. The worktree root can still be overridden with `CONTAINER_PI_WORKTREE_ROOT`.
 
 ## Commands
 
@@ -187,7 +187,7 @@ CONTAINER_PI_ENGINE=docker        # or podman
 CONTAINER_PI_IMAGE=container-pi:latest
 CONTAINER_PI_NAME=my-custom-name
 CONTAINER_PI_NO_TUI=1              # make no-arg invocation run pi directly
-CONTAINER_PI_WORKTREE_ROOT=/tmp/container-pi/worktrees
+CONTAINER_PI_WORKTREE_ROOT=~/.container-pi/worktrees
 ```
 
 The wrapper also forwards common provider keys like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, AWS env vars, etc.
