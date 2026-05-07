@@ -1,4 +1,5 @@
 #!/usr/bin/env -S tsx
+import blessed from "blessed";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
@@ -144,24 +145,148 @@ function start(piArgs: string[]) {
   attach();
 }
 
-function status() {
-  console.log(`engine:    ${engine}`);
-  console.log(`image:     ${image}`);
-  console.log(`container: ${containerName}`);
-  console.log(`project:   ${resolve(cwd)}`);
-  console.log(`exists:    ${containerExists()}`);
-  console.log(`running:   ${containerRunning()}`);
+function statusLines() {
+  return [
+    `engine:    ${engine}`,
+    `image:     ${image}`,
+    `container: ${containerName}`,
+    `project:   ${resolve(cwd)}`,
+    `exists:    ${containerExists()}`,
+    `running:   ${containerRunning()}`,
+  ];
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
+function status() {
+  console.log(statusLines().join("\n"));
+}
+
+function stopContainer() {
+  if (containerExists()) run(engine, ["rm", "-f", containerName]);
+}
+
+function logs() {
+  run(engine, ["logs", "-f", containerName]);
+}
+
+function tui() {
+  const screen = blessed.screen({ smartCSR: true, title: "container-pi" });
+
+  const box = blessed.box({
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    border: "line",
+    style: { border: { fg: "gray" } },
+  });
+
+  const title = blessed.text({
+    parent: box,
+    top: 1,
+    left: 3,
+    content: "container-pi",
+    style: { fg: "cyan", bold: true },
+  });
+
+  const meta = blessed.text({
+    parent: box,
+    top: 3,
+    left: 3,
+    width: "95%",
+    height: 7,
+    content: statusLines().join("\n"),
+    style: { fg: "white" },
+  });
+
+  const items = [
+    "Start / attach pi",
+    "Attach tmux session",
+    "Open shell",
+    "Stop/remove container",
+    "Build image",
+    "Rebuild image",
+    "Follow logs",
+    "Refresh status",
+    "Quit",
+  ];
+
+  const list = blessed.list({
+    parent: box,
+    top: 11,
+    left: 3,
+    width: "50%",
+    height: items.length + 2,
+    keys: true,
+    mouse: true,
+    vi: true,
+    items,
+    border: "line",
+    label: " actions ",
+    style: {
+      border: { fg: "gray" },
+      selected: { bg: "blue", fg: "white", bold: true },
+      item: { fg: "white" },
+    },
+  });
+
+  const help = blessed.text({
+    parent: box,
+    bottom: 1,
+    left: 3,
+    content: "↑/↓ or j/k select • enter run • q quit • tmux detach: Ctrl-b d",
+    style: { fg: "gray" },
+  });
+
+  function refresh() {
+    meta.setContent(statusLines().join("\n"));
+    screen.render();
+  }
+
+  function leaveAnd(action: () => void, reopen = true) {
+    screen.destroy();
+    action();
+    if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
+  }
+
+  list.on("select", (_item, index) => {
+    switch (index) {
+      case 0: leaveAnd(() => start([])); break;
+      case 1: leaveAnd(attach); break;
+      case 2: leaveAnd(shell); break;
+      case 3: stopContainer(); refresh(); break;
+      case 4: leaveAnd(() => buildImage(false)); break;
+      case 5: leaveAnd(() => buildImage(true)); break;
+      case 6: leaveAnd(logs); break;
+      case 7: refresh(); break;
+      case 8: screen.destroy(); process.exit(0);
+    }
+  });
+
+  screen.key(["q", "C-c", "escape"], () => {
+    screen.destroy();
+    process.exit(0);
+  });
+
+  screen.append(box);
+  list.focus();
+  screen.render();
+}
+
+const [cmd] = process.argv.slice(2);
 
 switch (cmd) {
+  case undefined:
+    if (process.stdin.isTTY && process.stdout.isTTY && process.env.CONTAINER_PI_NO_TUI !== "1") tui();
+    else start([]);
+    break;
+  case "run": start(process.argv.slice(3)); break;
+  case "tui": tui(); break;
   case "build": buildImage(false); break;
   case "rebuild": buildImage(true); break;
   case "attach": attach(); break;
   case "shell": shell(); break;
-  case "stop": if (containerExists()) run(engine, ["rm", "-f", containerName]); break;
-  case "logs": run(engine, ["logs", "-f", containerName]); break;
+  case "stop": stopContainer(); break;
+  case "logs": logs(); break;
   case "status": status(); break;
   case "help":
   case "--help":
@@ -169,18 +294,21 @@ switch (cmd) {
     console.log(`container-pi
 
 Usage:
-  container-pi [pi args...]       Start or attach pi in this project container
-  container-pi attach             Attach to existing tmux session
-  container-pi shell              Open a shell in the same container
-  container-pi stop               Stop/remove this project container
-  container-pi status             Show project container status
-  container-pi logs               Follow container logs
-  container-pi build|rebuild      Build image
+  container-pi                 Open the TUI
+  container-pi run [pi args...] Start or attach pi in this project container
+  container-pi tui             Open the TUI explicitly
+  container-pi attach          Attach to existing tmux session
+  container-pi shell           Open a shell in the same container
+  container-pi stop            Stop/remove this project container
+  container-pi status          Show project container status
+  container-pi logs            Follow container logs
+  container-pi build|rebuild   Build image
 
 Environment:
   CONTAINER_PI_ENGINE=docker|podman
   CONTAINER_PI_IMAGE=container-pi:latest
   CONTAINER_PI_NAME=custom-name
+  CONTAINER_PI_NO_TUI=1
 `);
     break;
   default:

@@ -50,25 +50,35 @@ cd /path/to/project
 container-pi
 ```
 
+With no arguments, `container-pi` opens a small terminal UI. From there you can start/attach Pi, open a shell, stop the project container, rebuild the image, follow logs, or refresh status.
+
 ## Commands
 
 ```bash
-container-pi                 # start container, run pi in tmux, attach
-container-pi attach          # attach to existing tmux session
-container-pi shell           # open shell in same container
-container-pi stop            # remove project container
-container-pi status          # show image/container/project info
-container-pi logs            # follow container logs
-container-pi build           # build image
-container-pi rebuild         # rebuild image with --no-cache
+container-pi                  # open the TUI
+container-pi tui              # open the TUI explicitly
+container-pi run              # start container, run pi in tmux, attach
+container-pi attach           # attach to existing tmux session
+container-pi shell            # open shell in same container
+container-pi stop             # remove project container
+container-pi status           # show image/container/project info
+container-pi logs             # follow container logs
+container-pi build            # build image
+container-pi rebuild          # rebuild image with --no-cache
 ```
 
-Pi args pass through:
+Pi args pass through via `run`:
 
 ```bash
-container-pi --model sonnet:high
-container-pi -p "summarize this repo"
-container-pi --offline
+container-pi run --model sonnet:high
+container-pi run -p "summarize this repo"
+container-pi run --offline
+```
+
+If you prefer the old no-TUI behavior:
+
+```bash
+CONTAINER_PI_NO_TUI=1 container-pi
 ```
 
 Detach from tmux with `Ctrl-b d`.
@@ -79,6 +89,7 @@ Detach from tmux with `Ctrl-b d`.
 CONTAINER_PI_ENGINE=docker        # or podman
 CONTAINER_PI_IMAGE=container-pi:latest
 CONTAINER_PI_NAME=my-custom-name
+CONTAINER_PI_NO_TUI=1              # make no-arg invocation run pi directly
 ```
 
 The wrapper also forwards common provider keys like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, AWS env vars, etc.

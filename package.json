@@ -9,9 +9,11 @@
     "rebuild-image": "tsx src/container-pi.ts rebuild"
   },
   "dependencies": {
+    "blessed": "^0.1.81",
     "tsx": "^4.19.2"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.27",
     "@types/node": "^22.10.2"
   }
 }
