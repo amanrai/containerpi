@@ -3,7 +3,7 @@ import blessed from "blessed";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
@@ -28,8 +28,9 @@ function findEngine(): string {
   throw new Error("container-pi requires docker or podman");
 }
 
-function run(cmd: string, args: string[], opts: { capture?: boolean; check?: boolean; stdio?: any } = {}) {
+function run(cmd: string, args: string[], opts: { capture?: boolean; check?: boolean; stdio?: any; cwd?: string } = {}) {
   const res = spawnSync(cmd, args, {
+    cwd: opts.cwd,
     encoding: opts.capture ? "utf8" : undefined,
     stdio: opts.stdio ?? (opts.capture ? "pipe" : "inherit"),
   });
@@ -306,6 +307,57 @@ function listRunning() {
   console.log(listRunningText());
 }
 
+function gitOutput(projectDir: string, args: string[]) {
+  return output("git", ["-C", projectDir, ...args]);
+}
+
+function gitRepoRoot(projectDir: string) {
+  return gitOutput(projectDir, ["rev-parse", "--show-toplevel"]);
+}
+
+function gitBranch(projectDir: string) {
+  return gitOutput(projectDir, ["branch", "--show-current"]);
+}
+
+function isLinkedWorktree(projectDir: string) {
+  const root = gitRepoRoot(projectDir);
+  if (!root) return false;
+  const text = gitOutput(root, ["worktree", "list", "--porcelain"]);
+  const worktrees = text.split("\n").filter(line => line.startsWith("worktree ")).map(line => resolve(line.slice("worktree ".length)));
+  return worktrees.length > 1 && resolve(root) !== worktrees[0];
+}
+
+function safeWorktreeName(name: string) {
+  return name.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "worktree";
+}
+
+function defaultWorktreePath(repoRoot: string, branch: string) {
+  return resolve(dirname(repoRoot), `${basename(repoRoot)}-${safeWorktreeName(branch)}`);
+}
+
+function startWorktreeSession(repoRoot: string, branch: string, worktreePath: string, sessionName: string) {
+  run("git", ["-C", repoRoot, "worktree", "add", "-b", branch, worktreePath]);
+  startNamed(sessionName, [], worktreePath);
+}
+
+function publishBranch(projectDir: string) {
+  const branch = gitBranch(projectDir);
+  if (!branch) {
+    console.error(`Could not determine current branch for ${projectDir}`);
+    process.exit(1);
+  }
+  run("git", ["-C", projectDir, "push", "-u", "origin", branch]);
+}
+
+function generatePr(projectDir: string) {
+  const gh = spawnSync("gh", ["--version"], { stdio: "ignore" });
+  if (gh.status !== 0) {
+    console.error("Generate PR requires the GitHub CLI (`gh`) to be installed and authenticated.");
+    process.exit(1);
+  }
+  run("gh", ["pr", "create", "--draft", "--fill"], { cwd: projectDir });
+}
+
 function tui(reopenSessionName?: string) {
   const screen = blessed.screen({ smartCSR: true, title: "container-pi" });
 
@@ -505,21 +557,80 @@ function tui(reopenSessionName?: string) {
     screen.render();
   }
 
+  function showMessage(title: string, message: string) {
+    const msg = blessed.message({
+      parent: box,
+      top: "center",
+      left: "center",
+      width: "60%",
+      height: "shrink",
+      border: "line",
+      label: ` ${title} `,
+      style: { border: { fg: "yellow" }, fg: "white" },
+    });
+    msg.display(message, 0, () => msg.destroy());
+    screen.render();
+  }
+
+  function ask(title: string, value: string, callback: (value: string) => void) {
+    const prompt = blessed.prompt({
+      parent: box,
+      top: "center",
+      left: "center",
+      width: "70%",
+      height: "shrink",
+      border: "line",
+      label: ` ${title} `,
+      keys: true,
+      vi: true,
+      style: { border: { fg: "magenta" }, fg: "white" },
+    }) as any;
+    prompt.input(title, value, (_err: unknown, result: string) => {
+      prompt.destroy();
+      const trimmed = String(result || "").trim();
+      if (trimmed) callback(trimmed);
+      else list.focus();
+      screen.render();
+    });
+    screen.render();
+  }
+
   function showSessionActions(session: SessionInfo) {
+    const linkedWorktree = session.project ? isLinkedWorktree(session.project) : false;
+    const actions = linkedWorktree
+      ? ["Attach", "Generate PR", "Publish branch", "Stop/remove"]
+      : ["Attach", "Stop/remove"];
+    sessionActions.setItems(actions);
+    sessionActions.height = actions.length + 2;
     sessionActions.show();
     sessionActions.focus();
     screen.render();
 
     sessionActions.removeAllListeners("select");
     sessionActions.on("select", (_item, index) => {
-      switch (index) {
-        case 0: leaveAnd(() => attachContainer(session.name), true, session.name); break;
-        case 1:
+      const action = actions[index];
+      switch (action) {
+        case "Attach": leaveAnd(() => attachContainer(session.name), true, session.name); break;
+        case "Generate PR": leaveAnd(() => generatePr(session.project), true, session.name); break;
+        case "Publish branch": leaveAnd(() => publishBranch(session.project), true, session.name); break;
+        case "Stop/remove":
           stopContainerName(session.name);
           hideSessionActions();
           showSessions();
           break;
       }
+    });
+  }
+
+  function startSessionInWorktree() {
+    const root = gitRepoRoot(cwd);
+    if (!root) return showMessage("not a git repo", "Start session in worktree requires running container-pi inside a Git repository.");
+    ask("worktree branch", "agent/work", branch => {
+      const suggestedPath = defaultWorktreePath(root, branch);
+      ask("worktree path", suggestedPath, worktreePath => {
+        const name = newSessionName(worktreePath);
+        leaveAnd(() => startWorktreeSession(root, branch, worktreePath, name), true, name);
+      });
     });
   }
 
@@ -574,7 +685,11 @@ function tui(reopenSessionName?: string) {
     browser.hide();
     sessionActions.hide();
     const sessions = listSessions();
-    const labels = ["+ New session", ...sessions.map(s => `${s.name}  ${s.status}${s.project ? `  ${s.project}` : ""}`)];
+    const labels = [
+      "+ New session",
+      "+ Start session in worktree",
+      ...sessions.map(s => `${s.name}  ${s.status}${s.project ? `  ${s.project}` : ""}`),
+    ];
     sessionList.setItems(labels);
     sessionList.show();
     sessionList.focus();
@@ -583,7 +698,8 @@ function tui(reopenSessionName?: string) {
     sessionList.removeAllListeners("select");
     sessionList.on("select", (_item, index) => {
       if (index === 0) return showWorkspaceBrowser(cwd);
-      const session = sessions[index - 1];
+      if (index === 1) return startSessionInWorktree();
+      const session = sessions[index - 2];
       if (session) showSessionActions(session);
     });
   }
@@ -623,7 +739,7 @@ function tui(reopenSessionName?: string) {
     const sessions = listSessions();
     const index = sessions.findIndex(s => s.name === reopenSessionName);
     if (index >= 0) {
-      sessionList.select(index + 1);
+      sessionList.select(index + 2);
       showSessionActions(sessions[index]);
     }
   } else {
