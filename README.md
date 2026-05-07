@@ -50,7 +50,7 @@ cd /path/to/project
 container-pi
 ```
 
-With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. Selecting a session opens a second menu with **Attach** and **Stop/remove**.
+With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. New session opens a directory browser so you can choose the workspace. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**.
 
 ## Commands
 
@@ -83,6 +83,15 @@ CONTAINER_PI_NO_TUI=1 container-pi
 ```
 
 Detach from tmux with `Ctrl-b d`.
+
+Directory browser keys:
+
+- `Enter` on a directory descends into it
+- `Enter` on `✓ Use this directory` starts a new session there
+- `Backspace` goes up one directory
+- `~` jumps to your home directory
+- `/` jumps to filesystem root
+- `Esc` returns to the sessions list
 
 ## Environment
 

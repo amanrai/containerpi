@@ -2,7 +2,7 @@
 import blessed from "blessed";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -90,9 +90,9 @@ function envArgs(): string[] {
   return args;
 }
 
-function mountArgs(): string[] {
+function mountArgs(projectDir = cwd): string[] {
   const args = [
-    "-v", `${resolve(cwd)}:/workspace:rw`,
+    "-v", `${resolve(projectDir)}:/workspace:rw`,
     "-v", `${home}/.pi:/home/pi/.pi:rw`,
     "-v", `${home}/.agents:/home/pi/.agents:rw`,
     "-v", `${home}/.codex:/home/pi/.codex:rw`,
@@ -139,7 +139,8 @@ function shell() {
   ]);
 }
 
-function startNamed(name: string, piArgs: string[]) {
+function startNamed(name: string, piArgs: string[], projectDir = cwd) {
+  const resolvedProjectDir = resolve(projectDir);
   ensureConfigDirs();
   if (!imageExists()) buildImage(false);
 
@@ -149,13 +150,15 @@ function startNamed(name: string, piArgs: string[]) {
   run(engine, [
     "run", "-d",
     "--name", name,
+    "--label", `container-pi.project=${resolvedProjectDir}`,
+    "--label", `container-pi.created=${new Date().toISOString()}`,
     "-e", `HOST_UID=${process.getuid?.() ?? 1000}`,
     "-e", `HOST_GID=${process.getgid?.() ?? 1000}`,
     "-e", "PI_CODING_AGENT_DIR=/home/pi/.pi/agent",
     "-e", `CONTAINER_PI_TMUX_SOCKET=${tmuxSocket}`,
     "-e", `CONTAINER_PI_TMUX_SESSION=${tmuxSession}`,
     ...envArgs(),
-    ...mountArgs(),
+    ...mountArgs(resolvedProjectDir),
     "-w", "/workspace",
     image,
     "pi", ...piArgs,
@@ -164,8 +167,11 @@ function startNamed(name: string, piArgs: string[]) {
   attachContainer(name);
 }
 
-function newSessionName() {
-  return `container-pi-${projectHash}-${Date.now().toString(36)}`;
+function newSessionName(projectDir = cwd) {
+  const resolved = resolve(projectDir);
+  const hash = createHash("sha1").update(resolved).digest("hex").slice(0, 8);
+  const base = resolved.split(/[\\/]/).filter(Boolean).pop()?.replace(/[^a-zA-Z0-9_.-]/g, "-") || "workspace";
+  return `container-pi-${base}-${hash}-${Date.now().toString(36)}`;
 }
 
 function start(piArgs: string[]) {
@@ -199,23 +205,23 @@ function logs() {
   run(engine, ["logs", "-f", containerName]);
 }
 
-type SessionInfo = { name: string; image: string; status: string };
+type SessionInfo = { name: string; image: string; status: string; project: string };
 
 function listSessions(): SessionInfo[] {
-  const format = "{{.Names}}\\t{{.Image}}\\t{{.Status}}";
+  const format = "{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Label \"container-pi.project\"}}";
   const r = run(engine, ["ps", "-a", "--filter", "name=container-pi-", "--format", format], { capture: true, check: false });
   const text = r.status === 0 ? String(r.stdout).trim() : "";
   if (!text) return [];
   return text.split("\n").map(line => {
-    const [name = "", image = "", status = ""] = line.split("\t");
-    return { name, image, status };
+    const [name = "", image = "", status = "", project = ""] = line.split("\t");
+    return { name, image, status, project };
   }).filter(s => s.name.startsWith("container-pi-"));
 }
 
 function listRunningText() {
   const sessions = listSessions();
   if (!sessions.length) return "No container-pi sessions.";
-  return ["NAMES                       IMAGE                 STATUS", ...sessions.map(s => `${s.name.padEnd(27)} ${s.image.padEnd(21)} ${s.status}`)].join("\n");
+  return ["NAMES                                 IMAGE                 STATUS        PROJECT", ...sessions.map(s => `${s.name.padEnd(37)} ${s.image.padEnd(21)} ${s.status.padEnd(13)} ${s.project}`)].join("\n");
 }
 
 function listRunning() {
@@ -319,6 +325,25 @@ function tui() {
     },
   });
 
+  const browser = blessed.list({
+    parent: box,
+    top: 11,
+    left: "55%",
+    width: "42%",
+    height: 18,
+    keys: true,
+    mouse: true,
+    vi: true,
+    hidden: true,
+    border: "line",
+    label: " choose workspace ",
+    style: {
+      border: { fg: "green" },
+      selected: { bg: "green", fg: "black", bold: true },
+      item: { fg: "white" },
+    },
+  });
+
   const help = blessed.text({
     parent: box,
     bottom: 1,
@@ -338,6 +363,12 @@ function tui() {
     if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
   }
 
+  function hideBrowser() {
+    browser.hide();
+    sessionList.focus();
+    screen.render();
+  }
+
   function hideSessionActions() {
     sessionActions.hide();
     sessionList.focus();
@@ -345,6 +376,7 @@ function tui() {
   }
 
   function hideSessions() {
+    browser.hide();
     sessionActions.hide();
     sessionList.hide();
     list.focus();
@@ -369,10 +401,58 @@ function tui() {
     });
   }
 
+  function showWorkspaceBrowser(dir = cwd) {
+    sessionActions.hide();
+    let current = resolve(dir);
+
+    function renderBrowser() {
+      const entries = readdirSync(current, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith("."))
+        .map(entry => entry.name)
+        .sort((a, b) => a.localeCompare(b));
+      browser.setLabel(` choose workspace: ${current} `);
+      browser.setItems(["✓ Use this directory", "..", ...entries.map(name => `${name}/`)]);
+      browser.show();
+      browser.focus();
+      screen.render();
+    }
+
+    browser.removeAllListeners("select");
+    browser.on("select", (_item, index) => {
+      if (index === 0) return leaveAnd(() => startNamed(newSessionName(current), [], current));
+      if (index === 1) {
+        current = resolve(current, "..");
+        return renderBrowser();
+      }
+      const selected = String(browser.getItem(index)?.content ?? "").replace(/\/$/, "");
+      const next = resolve(current, selected);
+      if (existsSync(next) && statSync(next).isDirectory()) {
+        current = next;
+        renderBrowser();
+      }
+    });
+
+    browser.key(["backspace"], () => {
+      current = resolve(current, "..");
+      renderBrowser();
+    });
+    browser.key(["~"], () => {
+      current = home;
+      renderBrowser();
+    });
+    browser.key(["/"], () => {
+      current = "/";
+      renderBrowser();
+    });
+
+    renderBrowser();
+  }
+
   function showSessions() {
+    browser.hide();
     sessionActions.hide();
     const sessions = listSessions();
-    const labels = ["+ New session", ...sessions.map(s => `${s.name}  ${s.status}`)];
+    const labels = ["+ New session", ...sessions.map(s => `${s.name}  ${s.status}${s.project ? `  ${s.project}` : ""}`)];
     sessionList.setItems(labels);
     sessionList.show();
     sessionList.focus();
@@ -380,7 +460,7 @@ function tui() {
 
     sessionList.removeAllListeners("select");
     sessionList.on("select", (_item, index) => {
-      if (index === 0) return leaveAnd(() => startNamed(newSessionName(), []));
+      if (index === 0) return showWorkspaceBrowser(cwd);
       const session = sessions[index - 1];
       if (session) showSessionActions(session);
     });
@@ -388,6 +468,7 @@ function tui() {
 
   sessionList.key(["escape"], hideSessions);
   sessionActions.key(["escape"], hideSessionActions);
+  browser.key(["escape"], hideBrowser);
 
   list.on("select", (_item, index) => {
     switch (index) {
@@ -401,7 +482,8 @@ function tui() {
   });
 
   screen.key(["escape"], () => {
-    if (!sessionActions.hidden) hideSessionActions();
+    if (!browser.hidden) hideBrowser();
+    else if (!sessionActions.hidden) hideSessionActions();
     else if (!sessionList.hidden) hideSessions();
   });
 
