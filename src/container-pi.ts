@@ -439,19 +439,8 @@ function tui(reopenSessionName?: string) {
     top: 3,
     left: 3,
     width: "95%",
-    height: 7,
-    content: [
-      " _",
-      "| |_ _ __ ___  _   ___  __",
-      "| __| '_ ` _ \\| | | \\ \\/ /",
-      "| |_| | | | | | |_| |>  <",
-      " \\__|_| |_| |_|\\__,_/_/\\_\\",
-      "              ^       _ __ (_)",
-      "                     | '_ \\| |",
-      "                     | |_) | |",
-      "                     | .__/|_|",
-      "                     |_|",
-    ].join("\n"),
+    height: 3,
+    content: "pi in tmux, mounted at /workspace",
     style: { fg: "cyan" },
   });
 
