@@ -254,8 +254,6 @@ function tui() {
 
   const items = [
     "Sessions",
-    "Open shell",
-    "Stop/remove current project container",
     "Build image",
     "Rebuild image",
     "Follow logs",
@@ -394,13 +392,11 @@ function tui() {
   list.on("select", (_item, index) => {
     switch (index) {
       case 0: showSessions(); break;
-      case 1: leaveAnd(shell); break;
-      case 2: stopContainer(); refresh(); break;
-      case 3: leaveAnd(() => buildImage(false)); break;
-      case 4: leaveAnd(() => buildImage(true)); break;
-      case 5: leaveAnd(logs); break;
-      case 6: refresh(); break;
-      case 7: screen.destroy(); process.exit(0);
+      case 1: leaveAnd(() => buildImage(false)); break;
+      case 2: leaveAnd(() => buildImage(true)); break;
+      case 3: leaveAnd(logs); break;
+      case 4: refresh(); break;
+      case 5: screen.destroy(); process.exit(0);
     }
   });
 

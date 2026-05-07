@@ -60,7 +60,7 @@ container-pi tui              # open the TUI explicitly
 container-pi run              # start default project container, run pi in tmux, attach
 container-pi attach           # attach to existing tmux session
 container-pi shell            # open shell in same container
-container-pi stop             # remove project container
+container-pi stop             # remove default project container
 container-pi status           # show image/container/project info
 container-pi logs             # follow container logs
 container-pi list             # list running container-pi containers
