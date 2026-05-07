@@ -252,7 +252,7 @@ function listRunning() {
   console.log(listRunningText());
 }
 
-function tui() {
+function tui(reopenSessionName?: string) {
   const screen = blessed.screen({ smartCSR: true, title: "container-pi" });
 
   const box = blessed.box({
@@ -381,10 +381,10 @@ function tui() {
     screen.render();
   }
 
-  function leaveAnd(action: () => void, reopen = true) {
+  function leaveAnd(action: () => void, reopen = true, reopenSessionName?: string) {
     screen.destroy();
     action();
-    if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
+    if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui(reopenSessionName);
   }
 
   function hideBrowser() {
@@ -415,7 +415,7 @@ function tui() {
     sessionActions.removeAllListeners("select");
     sessionActions.on("select", (_item, index) => {
       switch (index) {
-        case 0: leaveAnd(() => attachContainer(session.name)); break;
+        case 0: leaveAnd(() => attachContainer(session.name), true, session.name); break;
         case 1:
           stopContainerName(session.name);
           hideSessionActions();
@@ -517,7 +517,17 @@ function tui() {
   });
 
   screen.append(box);
-  list.focus();
+  if (reopenSessionName) {
+    showSessions();
+    const sessions = listSessions();
+    const index = sessions.findIndex(s => s.name === reopenSessionName);
+    if (index >= 0) {
+      sessionList.select(index + 1);
+      showSessionActions(sessions[index]);
+    }
+  } else {
+    list.focus();
+  }
   screen.render();
 }
 
