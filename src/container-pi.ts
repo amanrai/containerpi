@@ -17,6 +17,7 @@ const projectHash = createHash("sha1").update(resolve(cwd)).digest("hex").slice(
 const containerName = process.env.CONTAINER_PI_NAME || `container-pi-${projectHash}`;
 const tmuxSocket = "/tmp/container-pi.tmux";
 const tmuxSession = "pi";
+const terminalEnv = ["-e", "TERM=xterm-256color", "-e", "COLORTERM=truecolor", "-e", "FORCE_COLOR=1"];
 
 function findEngine(): string {
   for (const candidate of ["docker", "podman"]) {
@@ -137,7 +138,7 @@ function attachContainer(name: string) {
   run(engine, [
     "exec", "-it", name,
     "bash", "-lc",
-    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); exec gosu \"$u\" tmux -S ${tmuxSocket} attach -t ${tmuxSession}`
+    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1; exec gosu \"$u\" tmux -2 -S ${tmuxSocket} attach -t ${tmuxSession}`
   ]);
 }
 
@@ -174,6 +175,7 @@ function startNamed(name: string, piArgs: string[], projectDir = cwd) {
     "--name", name,
     "--label", `container-pi.project=${resolvedProjectDir}`,
     "--label", `container-pi.created=${new Date().toISOString()}`,
+    ...terminalEnv,
     "-e", `HOST_UID=${process.getuid?.() ?? 1000}`,
     "-e", `HOST_GID=${process.getgid?.() ?? 1000}`,
     "-e", "PI_CODING_AGENT_DIR=/home/pi/.pi/agent",

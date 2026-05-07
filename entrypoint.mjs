@@ -23,6 +23,9 @@ if (!output("getent", ["passwd", uid])) run("useradd", ["-m", "-u", uid, "-g", g
 const passwd = output("getent", ["passwd", uid]);
 const [userName,,,,, userHome] = passwd.split(":");
 process.env.HOME = userHome;
+process.env.TERM = "xterm-256color";
+process.env.COLORTERM = "truecolor";
+process.env.FORCE_COLOR = "1";
 
 for (const dir of [".pi", ".agents", ".codex", ".claude"]) {
   mkdirSync(`${userHome}/${dir}`, { recursive: true });
@@ -40,11 +43,11 @@ function shellQuote(s) {
 }
 
 const commandFile = "/tmp/container-pi-command.sh";
-writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
+writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nexport FORCE_COLOR=1\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
 chmodSync(commandFile, 0o755);
 try { chownSync(commandFile, Number(uid), Number(gid)); } catch {}
 try { rmSync(tmuxSocket, { force: true }); } catch {}
 
-const tmuxCmd = `tmux -S ${shellQuote(tmuxSocket)} new-session -d -s ${shellQuote(tmuxSession)} ${shellQuote(commandFile)} && tail -f /dev/null`;
+const tmuxCmd = `tmux -2 -S ${shellQuote(tmuxSocket)} new-session -d -s ${shellQuote(tmuxSession)} ${shellQuote(commandFile)} && tail -f /dev/null`;
 const child = spawn("gosu", [userName, "bash", "-lc", tmuxCmd], { stdio: "inherit", env: process.env });
 child.on("exit", code => process.exit(code ?? 0));
