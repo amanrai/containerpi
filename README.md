@@ -1,5 +1,18 @@
 # container-pi
 
+
+```
+        _
+  _ __ (_)  container-pi
+ | '_ \| |
+ | |_) | |
+ | .__/|_|
+ |_|
+```
+
+Built with [Pi](https://pi.dev), but in no way associated with the builders of the very excellent [Pi Coding Agent](https://github.com/badlogic/pi-mono) itself.
+
+
 Run `pi` inside a per-project Linux container, with the current folder mounted read-write and the live Pi UI running inside tmux.
 
 ## Why TypeScript/tsx?
