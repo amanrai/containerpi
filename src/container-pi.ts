@@ -333,6 +333,10 @@ function listRunning() {
   console.log(listRunningText());
 }
 
+function displaySessionName(name: string) {
+  return name.startsWith("container-pi-") ? name.slice("container-pi-".length) : name;
+}
+
 function gitOutput(projectDir: string, args: string[]) {
   return output("git", ["-C", projectDir, ...args]);
 }
@@ -803,7 +807,7 @@ function tui(reopenSessionName?: string) {
     const sessions = listSessions();
     const labels = [
       "+ New session",
-      ...sessions.map(s => `${s.name}  ${s.status}${s.project ? `  ${s.project}` : ""}`),
+      ...sessions.map(s => `${displaySessionName(s.name)}  ${s.status}${s.project ? `  ${s.project}` : ""}`),
     ];
     sessionList.setItems(labels);
     sessionList.show();
