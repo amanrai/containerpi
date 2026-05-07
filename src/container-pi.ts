@@ -691,11 +691,9 @@ function tui(reopenSessionName?: string) {
     const root = gitRepoRoot(cwd);
     if (!root) return showMessage("not a git repo", "Start session in worktree requires running container-pi inside a Git repository.");
     ask("worktree branch", "agent/work", branch => {
-      const suggestedPath = defaultWorktreePath(root, branch);
-      ask("worktree path", suggestedPath, worktreePath => {
-        const name = newSessionName(worktreePath);
-        leaveAnd(() => startWorktreeSession(root, branch, worktreePath, name), true, name);
-      });
+      const worktreePath = defaultWorktreePath(root, branch);
+      const name = newSessionName(worktreePath);
+      leaveAnd(() => startWorktreeSession(root, branch, worktreePath, name), true, name);
     });
   }
 

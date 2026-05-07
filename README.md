@@ -93,7 +93,7 @@ cd /path/to/project
 container-pi
 ```
 
-With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session** and **Start session in worktree**. New session opens a directory browser so you can choose the workspace. Worktree session prompts for a branch name/path, creates a Git worktree, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
+With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session** and **Start session in worktree**. New session opens a directory browser so you can choose the workspace. Worktree session prompts for a branch name, creates a Git worktree under the configured worktree path, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
 
 Use **Configure worktree path** from the main menu to set where new worktrees are created. The default is `/tmp/container-pi/worktrees`.
 
