@@ -104,6 +104,23 @@ function mountArgs(projectDir = cwd): string[] {
   return args;
 }
 
+function tmuxHasSession(name: string) {
+  return run(engine, [
+    "exec", name,
+    "bash", "-lc",
+    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); gosu \"$u\" tmux -S ${tmuxSocket} has-session -t ${tmuxSession}`
+  ], { check: false, stdio: "ignore" }).status === 0;
+}
+
+function waitForTmuxSession(name: string, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (tmuxHasSession(name)) return true;
+    spawnSync(process.execPath, ["-e", "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)"]);
+  }
+  return false;
+}
+
 function attachContainer(name: string) {
   const exists = run(engine, ["container", "inspect", name], { check: false, stdio: "ignore" }).status === 0;
   if (!exists) {
@@ -112,6 +129,11 @@ function attachContainer(name: string) {
   }
   const running = output(engine, ["inspect", "-f", "{{.State.Running}}", name]) === "true";
   if (!running) run(engine, ["start", name]);
+  if (!waitForTmuxSession(name)) {
+    console.error(`tmux session '${tmuxSession}' did not start in container ${name}. Recent logs:`);
+    run(engine, ["logs", "--tail", "80", name], { check: false });
+    process.exit(1);
+  }
   run(engine, [
     "exec", "-it", name,
     "bash", "-lc",

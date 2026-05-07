@@ -27,7 +27,10 @@ process.env.HOME = userHome;
 for (const dir of [".pi", ".agents", ".codex", ".claude"]) {
   mkdirSync(`${userHome}/${dir}`, { recursive: true });
 }
-spawnSync("chown", ["-R", `${uid}:${gid}`, userHome], { stdio: "ignore" });
+// Do not chown -R $HOME here. On macOS/Docker Desktop these config dirs are
+// bind mounts from the host, and recursive chown can be slow or fail in odd ways.
+// The mounted files only need to be readable/writable through Docker's file
+// sharing layer, which Docker Desktop handles independently of Linux ownership.
 
 process.chdir("/workspace");
 const command = process.argv.slice(2).length ? process.argv.slice(2) : ["pi"];
@@ -37,7 +40,7 @@ function shellQuote(s) {
 }
 
 const commandFile = "/tmp/container-pi-command.sh";
-writeFileSync(commandFile, `#!/usr/bin/env bash\nset -euo pipefail\ncd /workspace\nexec ${command.map(shellQuote).join(" ")}\n`);
+writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
 chmodSync(commandFile, 0o755);
 try { chownSync(commandFile, Number(uid), Number(gid)); } catch {}
 try { rmSync(tmuxSocket, { force: true }); } catch {}
