@@ -17,7 +17,7 @@ Run `pi` inside a per-project Linux container, with the current folder mounted r
 
 ## Why TypeScript/tsx?
 
-Yes: a TypeScript wrapper is nicer than shell for Linux/macOS portability. It avoids `sed`/`readlink`/`sha1sum` differences, gives cleaner argument handling, and is easier to extend.
+A TypeScript wrapper is nicer than shell for Linux/macOS portability. It avoids `sed`/`readlink`/`sha1sum` differences, gives cleaner argument handling, and is easier to extend.
 
 There is still a tiny Node entrypoint inside the container because the container must create a user matching your host UID/GID, start tmux, and keep the container alive.
 
