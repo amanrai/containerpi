@@ -285,7 +285,7 @@ function tui() {
     parent: box,
     bottom: 1,
     left: 3,
-    content: "↑/↓ or j/k select • enter run • q quit • tmux detach: Ctrl-b d",
+    content: "↑/↓ or j/k select • enter run • esc back • q quit • tmux detach: Ctrl-b d",
     style: { fg: "gray" },
   });
 
@@ -298,6 +298,12 @@ function tui() {
     screen.destroy();
     action();
     if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
+  }
+
+  function hideSessions() {
+    sessionList.hide();
+    list.focus();
+    screen.render();
   }
 
   function showSessions() {
@@ -316,6 +322,8 @@ function tui() {
     });
   }
 
+  sessionList.key(["escape"], hideSessions);
+
   list.on("select", (_item, index) => {
     switch (index) {
       case 0: showSessions(); break;
@@ -329,7 +337,11 @@ function tui() {
     }
   });
 
-  screen.key(["q", "C-c", "escape"], () => {
+  screen.key(["escape"], () => {
+    if (!sessionList.hidden) hideSessions();
+  });
+
+  screen.key(["q", "C-c"], () => {
     screen.destroy();
     process.exit(0);
   });
