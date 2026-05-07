@@ -2,7 +2,7 @@
 import blessed from "blessed";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -18,7 +18,11 @@ const containerName = process.env.CONTAINER_PI_NAME || `container-pi-${projectHa
 const tmuxSocket = "/tmp/container-pi.tmux";
 const tmuxSession = "pi";
 const terminalEnv = ["-e", "TERM=xterm-256color", "-e", "COLORTERM=truecolor", "-e", "FORCE_COLOR=1"];
+const configDir = resolve(home, ".config", "container-pi");
+const settingsFile = resolve(configDir, "settings.json");
+const defaultWorktreeRoot = "/tmp/container-pi/worktrees";
 type HookName = "pre-load" | "session-attach" | "session-detach" | "shutdown";
+type Settings = { worktreeRoot?: string };
 
 function findEngine(): string {
   for (const candidate of ["docker", "podman"]) {
@@ -41,6 +45,27 @@ function run(cmd: string, args: string[], opts: { capture?: boolean; check?: boo
 function output(cmd: string, args: string[]): string {
   const r = run(cmd, args, { capture: true, check: false });
   return r.status === 0 ? String(r.stdout).trim() : "";
+}
+
+function loadSettings(): Settings {
+  try {
+    return JSON.parse(readFileSync(settingsFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings(settings: Settings) {
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
+function worktreeRoot() {
+  return process.env.CONTAINER_PI_WORKTREE_ROOT || loadSettings().worktreeRoot || defaultWorktreeRoot;
+}
+
+function setWorktreeRoot(path: string) {
+  saveSettings({ ...loadSettings(), worktreeRoot: resolve(path) });
 }
 
 function projectForContainer(name: string) {
@@ -262,6 +287,7 @@ function statusLines() {
     `project:   ${resolve(cwd)}`,
     `exists:    ${containerExists()}`,
     `running:   ${containerRunning()}`,
+    `worktrees: ${worktreeRoot()}`,
   ];
 }
 
@@ -332,10 +358,11 @@ function safeWorktreeName(name: string) {
 }
 
 function defaultWorktreePath(repoRoot: string, branch: string) {
-  return resolve(dirname(repoRoot), `${basename(repoRoot)}-${safeWorktreeName(branch)}`);
+  return resolve(worktreeRoot(), `${basename(repoRoot)}-${safeWorktreeName(branch)}`);
 }
 
 function startWorktreeSession(repoRoot: string, branch: string, worktreePath: string, sessionName: string) {
+  mkdirSync(dirname(resolve(worktreePath)), { recursive: true });
   run("git", ["-C", repoRoot, "worktree", "add", "-b", branch, worktreePath]);
   startNamed(sessionName, [], worktreePath);
 }
@@ -390,6 +417,7 @@ function tui(reopenSessionName?: string) {
 
   const items = [
     "Sessions",
+    "Configure worktree path",
     "Configure hooks",
     "Build image",
     "Rebuild image",
@@ -573,26 +601,63 @@ function tui(reopenSessionName?: string) {
   }
 
   function ask(title: string, value: string, callback: (value: string) => void) {
-    const prompt = blessed.prompt({
+    const form = blessed.form({
       parent: box,
       top: "center",
       left: "center",
-      width: "70%",
-      height: "shrink",
-      border: "line",
-      label: ` ${title} `,
+      width: "75%",
+      height: 9,
       keys: true,
       vi: true,
+      border: "line",
+      label: ` ${title} `,
       style: { border: { fg: "magenta" }, fg: "white" },
-    }) as any;
-    prompt.input(title, value, (_err: unknown, result: string) => {
-      prompt.destroy();
-      const trimmed = String(result || "").trim();
+    });
+    blessed.text({
+      parent: form,
+      top: 0,
+      left: 2,
+      content: "Edit value, then press Enter to accept. Esc cancels.",
+      style: { fg: "gray" },
+    });
+    const input = blessed.textbox({
+      parent: form,
+      top: 2,
+      left: 2,
+      width: "95%",
+      height: 3,
+      inputOnFocus: true,
+      keys: true,
+      mouse: true,
+      border: "line",
+      value,
+      style: { border: { fg: "cyan" }, fg: "white" },
+    });
+    function done() {
+      const trimmed = String(input.getValue() || "").trim();
+      form.destroy();
       if (trimmed) callback(trimmed);
       else list.focus();
       screen.render();
-    });
+    }
+    function cancel() {
+      form.destroy();
+      list.focus();
+      screen.render();
+    }
+    input.key(["enter"], done);
+    input.key(["escape", "C-c"], cancel);
+    form.key(["escape", "C-c"], cancel);
+    input.focus();
     screen.render();
+  }
+
+  function configureWorktreePath() {
+    ask("configure worktree path", worktreeRoot(), path => {
+      setWorktreeRoot(path);
+      meta.setContent(statusLines().join("\n"));
+      showMessage("worktree path saved", `Worktrees will be created under:\n${worktreeRoot()}`);
+    });
   }
 
   function showSessionActions(session: SessionInfo) {
@@ -712,12 +777,13 @@ function tui(reopenSessionName?: string) {
   list.on("select", (_item, index) => {
     switch (index) {
       case 0: showSessions(); break;
-      case 1: showHookConfig(); break;
-      case 2: leaveAnd(() => buildImage(false)); break;
-      case 3: leaveAnd(() => buildImage(true)); break;
-      case 4: leaveAnd(logs); break;
-      case 5: refresh(); break;
-      case 6: screen.destroy(); process.exit(0);
+      case 1: configureWorktreePath(); break;
+      case 2: showHookConfig(); break;
+      case 3: leaveAnd(() => buildImage(false)); break;
+      case 4: leaveAnd(() => buildImage(true)); break;
+      case 5: leaveAnd(logs); break;
+      case 6: refresh(); break;
+      case 7: screen.destroy(); process.exit(0);
     }
   });
 
@@ -787,6 +853,7 @@ Environment:
   CONTAINER_PI_IMAGE=container-pi:latest
   CONTAINER_PI_NAME=custom-name
   CONTAINER_PI_NO_TUI=1
+  CONTAINER_PI_WORKTREE_ROOT=/tmp/container-pi/worktrees
 `);
     break;
   default:

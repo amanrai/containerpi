@@ -95,6 +95,8 @@ container-pi
 
 With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session** and **Start session in worktree**. New session opens a directory browser so you can choose the workspace. Worktree session prompts for a branch name/path, creates a Git worktree, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
 
+Use **Configure worktree path** from the main menu to set where new worktrees are created. The default is `/tmp/container-pi/worktrees`.
+
 ## Commands
 
 ```bash
@@ -184,6 +186,7 @@ CONTAINER_PI_ENGINE=docker        # or podman
 CONTAINER_PI_IMAGE=container-pi:latest
 CONTAINER_PI_NAME=my-custom-name
 CONTAINER_PI_NO_TUI=1              # make no-arg invocation run pi directly
+CONTAINER_PI_WORKTREE_ROOT=/tmp/container-pi/worktrees
 ```
 
 The wrapper also forwards common provider keys like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, AWS env vars, etc.
