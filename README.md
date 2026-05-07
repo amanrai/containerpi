@@ -50,13 +50,31 @@ cd /path/to/project
 npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts
 ```
 
-Optional shell alias:
+## Make `container-pi` available as a command
+
+Replace `/home/amanrai/Code/container-pi` with the path where you cloned this repo.
+
+### macOS/Linux, zsh
+
+```bash
+echo "alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Linux, bash
+
+```bash
+echo "alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'" >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Current shell only
 
 ```bash
 alias container-pi='npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts'
 ```
 
-Then:
+Then from any project:
 
 ```bash
 cd /path/to/project
