@@ -50,14 +50,14 @@ cd /path/to/project
 container-pi
 ```
 
-With no arguments, `container-pi` opens a small terminal UI. From there you can start/attach Pi, open a shell, stop the project container, rebuild the image, follow logs, or refresh status.
+With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. Selecting a session opens a second menu with **Attach** and **Stop/remove**.
 
 ## Commands
 
 ```bash
 container-pi                  # open the TUI
 container-pi tui              # open the TUI explicitly
-container-pi run              # start container, run pi in tmux, attach
+container-pi run              # start default project container, run pi in tmux, attach
 container-pi attach           # attach to existing tmux session
 container-pi shell            # open shell in same container
 container-pi stop             # remove project container

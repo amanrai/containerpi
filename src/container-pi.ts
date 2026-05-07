@@ -44,13 +44,21 @@ function imageExists() {
   return run(engine, ["image", "inspect", image], { check: false, stdio: "ignore" }).status === 0;
 }
 
+function containerExistsName(name: string) {
+  return run(engine, ["container", "inspect", name], { check: false, stdio: "ignore" }).status === 0;
+}
+
+function containerRunningName(name: string) {
+  if (!containerExistsName(name)) return false;
+  return output(engine, ["inspect", "-f", "{{.State.Running}}", name]) === "true";
+}
+
 function containerExists() {
-  return run(engine, ["container", "inspect", containerName], { check: false, stdio: "ignore" }).status === 0;
+  return containerExistsName(containerName);
 }
 
 function containerRunning() {
-  if (!containerExists()) return false;
-  return output(engine, ["inspect", "-f", "{{.State.Running}}", containerName]) === "true";
+  return containerRunningName(containerName);
 }
 
 function buildImage(noCache = false) {
@@ -131,16 +139,16 @@ function shell() {
   ]);
 }
 
-function start(piArgs: string[]) {
+function startNamed(name: string, piArgs: string[]) {
   ensureConfigDirs();
   if (!imageExists()) buildImage(false);
 
-  if (containerRunning()) return attach();
-  if (containerExists()) run(engine, ["rm", "-f", containerName]);
+  if (containerRunningName(name)) return attachContainer(name);
+  if (containerExistsName(name)) run(engine, ["rm", "-f", name]);
 
   run(engine, [
     "run", "-d",
-    "--name", containerName,
+    "--name", name,
     "-e", `HOST_UID=${process.getuid?.() ?? 1000}`,
     "-e", `HOST_GID=${process.getgid?.() ?? 1000}`,
     "-e", "PI_CODING_AGENT_DIR=/home/pi/.pi/agent",
@@ -153,7 +161,15 @@ function start(piArgs: string[]) {
     "pi", ...piArgs,
   ]);
 
-  attach();
+  attachContainer(name);
+}
+
+function newSessionName() {
+  return `container-pi-${projectHash}-${Date.now().toString(36)}`;
+}
+
+function start(piArgs: string[]) {
+  startNamed(containerName, piArgs);
 }
 
 function statusLines() {
@@ -171,8 +187,12 @@ function status() {
   console.log(statusLines().join("\n"));
 }
 
+function stopContainerName(name: string) {
+  if (containerExistsName(name)) run(engine, ["rm", "-f", name]);
+}
+
 function stopContainer() {
-  if (containerExists()) run(engine, ["rm", "-f", containerName]);
+  stopContainerName(containerName);
 }
 
 function logs() {
@@ -233,9 +253,9 @@ function tui() {
   });
 
   const items = [
-    "Start / attach session",
+    "Sessions",
     "Open shell",
-    "Stop/remove container",
+    "Stop/remove current project container",
     "Build image",
     "Rebuild image",
     "Follow logs",
@@ -281,6 +301,26 @@ function tui() {
     },
   });
 
+  const sessionActions = blessed.list({
+    parent: box,
+    top: 26,
+    left: "55%",
+    width: "42%",
+    height: 5,
+    keys: true,
+    mouse: true,
+    vi: true,
+    hidden: true,
+    border: "line",
+    label: " session actions ",
+    items: ["Attach", "Stop/remove"],
+    style: {
+      border: { fg: "cyan" },
+      selected: { bg: "blue", fg: "white", bold: true },
+      item: { fg: "white" },
+    },
+  });
+
   const help = blessed.text({
     parent: box,
     bottom: 1,
@@ -300,15 +340,41 @@ function tui() {
     if (reopen && process.stdin.isTTY && process.stdout.isTTY) tui();
   }
 
+  function hideSessionActions() {
+    sessionActions.hide();
+    sessionList.focus();
+    screen.render();
+  }
+
   function hideSessions() {
+    sessionActions.hide();
     sessionList.hide();
     list.focus();
     screen.render();
   }
 
+  function showSessionActions(session: SessionInfo) {
+    sessionActions.show();
+    sessionActions.focus();
+    screen.render();
+
+    sessionActions.removeAllListeners("select");
+    sessionActions.on("select", (_item, index) => {
+      switch (index) {
+        case 0: leaveAnd(() => attachContainer(session.name)); break;
+        case 1:
+          stopContainerName(session.name);
+          hideSessionActions();
+          showSessions();
+          break;
+      }
+    });
+  }
+
   function showSessions() {
+    sessionActions.hide();
     const sessions = listSessions();
-    const labels = ["+ New session for this project", ...sessions.map(s => `${s.name}  ${s.status}`)];
+    const labels = ["+ New session", ...sessions.map(s => `${s.name}  ${s.status}`)];
     sessionList.setItems(labels);
     sessionList.show();
     sessionList.focus();
@@ -316,13 +382,14 @@ function tui() {
 
     sessionList.removeAllListeners("select");
     sessionList.on("select", (_item, index) => {
-      if (index === 0) return leaveAnd(() => start([]));
+      if (index === 0) return leaveAnd(() => startNamed(newSessionName(), []));
       const session = sessions[index - 1];
-      if (session) leaveAnd(() => attachContainer(session.name));
+      if (session) showSessionActions(session);
     });
   }
 
   sessionList.key(["escape"], hideSessions);
+  sessionActions.key(["escape"], hideSessionActions);
 
   list.on("select", (_item, index) => {
     switch (index) {
@@ -338,7 +405,8 @@ function tui() {
   });
 
   screen.key(["escape"], () => {
-    if (!sessionList.hidden) hideSessions();
+    if (!sessionActions.hidden) hideSessionActions();
+    else if (!sessionList.hidden) hideSessions();
   });
 
   screen.key(["q", "C-c"], () => {
