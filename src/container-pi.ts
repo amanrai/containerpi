@@ -338,6 +338,7 @@ function tui(reopenSessionName?: string) {
 
   const items = [
     "Sessions",
+    "Configure hooks",
     "Build image",
     "Rebuild image",
     "Follow logs",
@@ -422,6 +423,34 @@ function tui(reopenSessionName?: string) {
     },
   });
 
+  const hookConfig = blessed.box({
+    parent: box,
+    top: 11,
+    left: "55%",
+    width: "42%",
+    height: 14,
+    keys: true,
+    mouse: true,
+    hidden: true,
+    border: "line",
+    label: " configure hooks ",
+    content: [
+      "Hook configuration will live here.",
+      "",
+      "Current hook names:",
+      "  pre-load",
+      "  session-attach",
+      "  session-detach",
+      "  shutdown",
+      "",
+      "Esc returns to the main menu.",
+    ].join("\n"),
+    style: {
+      border: { fg: "magenta" },
+      fg: "white",
+    },
+  });
+
   const help = blessed.text({
     parent: box,
     bottom: 1,
@@ -458,6 +487,21 @@ function tui(reopenSessionName?: string) {
     sessionActions.hide();
     sessionList.hide();
     list.focus();
+    screen.render();
+  }
+
+  function hideHookConfig() {
+    hookConfig.hide();
+    list.focus();
+    screen.render();
+  }
+
+  function showHookConfig() {
+    browser.hide();
+    sessionActions.hide();
+    sessionList.hide();
+    hookConfig.show();
+    hookConfig.focus();
     screen.render();
   }
 
@@ -547,15 +591,17 @@ function tui(reopenSessionName?: string) {
   sessionList.key(["escape"], hideSessions);
   sessionActions.key(["escape"], hideSessionActions);
   browser.key(["escape"], hideBrowser);
+  hookConfig.key(["escape"], hideHookConfig);
 
   list.on("select", (_item, index) => {
     switch (index) {
       case 0: showSessions(); break;
-      case 1: leaveAnd(() => buildImage(false)); break;
-      case 2: leaveAnd(() => buildImage(true)); break;
-      case 3: leaveAnd(logs); break;
-      case 4: refresh(); break;
-      case 5: screen.destroy(); process.exit(0);
+      case 1: showHookConfig(); break;
+      case 2: leaveAnd(() => buildImage(false)); break;
+      case 3: leaveAnd(() => buildImage(true)); break;
+      case 4: leaveAnd(logs); break;
+      case 5: refresh(); break;
+      case 6: screen.destroy(); process.exit(0);
     }
   });
 
@@ -563,6 +609,7 @@ function tui(reopenSessionName?: string) {
     if (!browser.hidden) hideBrowser();
     else if (!sessionActions.hidden) hideSessionActions();
     else if (!sessionList.hidden) hideSessions();
+    else if (!hookConfig.hidden) hideHookConfig();
   });
 
   screen.key(["q", "C-c"], () => {
