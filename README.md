@@ -1,23 +1,30 @@
 # container-pi
 
-
+```text
+┌──────────────────────┐        _
+│  /workspace          │  _ __ (_)
+│  container session   │ | '_ \| |
+│  tmux + pi           │ | |_) | |
+└──────────────────────┘ | .__/|_|
+                         |_|
 ```
-        _
-  _ __ (_)  container-pi
- | '_ \| |
- | |_) | |
- | .__/|_|
- |_|
-```
 
-Built with [Pi](https://pi.dev), but in no way associated with the builders of the very excellent [Pi Coding Agent](https://github.com/badlogic/pi-mono) itself.
+Run [`pi`](https://github.com/badlogic/pi-mono) inside a per-project Linux container, with the selected workspace mounted at `/workspace` and the live Pi UI running inside `tmux`.
 
+Built with [Pi](https://pi.dev), but not associated with the Pi Coding Agent project or its builders.
 
-Run `pi` inside a per-project Linux container, with the current folder mounted read-write and the live Pi UI running inside tmux.
+## What it does
 
-## Prerequisite: set up Pi locally first
+- Starts Pi inside Docker or Podman.
+- Mounts one selected project/worktree into the container at `/workspace`.
+- Reuses your local agent auth/config from `~/.pi`, `~/.agents`, `~/.codex`, and `~/.claude`.
+- Keeps Pi running in `tmux`, so you can detach and reattach.
+- Can create Git worktrees for isolated agent sessions.
+- Provides lifecycle hooks for project/global automation.
 
-Before using `container-pi`, install and run the Pi Coding Agent locally at least once and log in to your subscription/provider there:
+## Prerequisites
+
+Install Docker or Podman, then install and log into Pi locally once:
 
 ```bash
 npm install -g @mariozechner/pi-coding-agent
@@ -25,29 +32,11 @@ pi
 # inside pi: /login
 ```
 
-`container-pi` mounts your local `~/.pi`, `~/.agents`, `~/.codex`, and `~/.claude` folders into the container, so it reuses your existing Pi auth, settings, skills, prompts, extensions, and sessions. If you have not logged in locally first, the container will not have your subscription/auth state.
+`container-pi` mounts your local config/auth folders into the container. If you have not logged into Pi locally first, the container will not have your subscription/provider auth state.
 
-## Why TypeScript/tsx?
+## Install
 
-A TypeScript wrapper is nicer than shell for Linux/macOS portability. It avoids `sed`/`readlink`/`sha1sum` differences, gives cleaner argument handling, and is easier to extend.
-
-There is still a tiny Node entrypoint inside the container because the container must create a user matching your host UID/GID, start tmux, and keep the container alive.
-
-## What gets mounted
-
-For convenience/auth reuse, this mounts the whole agent config folders:
-
-- `~/.pi` -> `/home/pi/.pi`
-- `~/.agents` -> `/home/pi/.agents`
-- `~/.codex` -> `/home/pi/.codex`
-- `~/.claude` -> `/home/pi/.claude`
-- current project -> `/workspace`
-
-This means Pi skills, prompts, extensions, packages, sessions, settings, auth, and related Claude/Codex config are available without re-login.
-
-Security note: those folders may contain credentials/tokens. This is convenient but only use images you trust.
-
-## Install/use from this folder
+From this repo:
 
 ```bash
 cd container-pi
@@ -55,65 +44,41 @@ npm install
 npm run container-pi -- status
 ```
 
-Run in another repo/folder by invoking the script path:
+Run from another project by pointing `tsx` at this repo:
 
 ```bash
 cd /path/to/project
-npx tsx /home/amanrai/Code/container-pi/src/container-pi.ts
+npx tsx /path/to/container-pi/src/container-pi.ts
 ```
 
-## Make `container-pi` available as a command
+### Optional shell alias
 
-Run these from inside the cloned `container-pi` repo. They capture the repo's current path with `pwd`, so there is no hardcoded install location.
-
-### macOS/Linux, zsh
+From inside the cloned `container-pi` repo:
 
 ```bash
 printf "alias container-pi='npx tsx %s/src/container-pi.ts'\n" "$(pwd)" >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### Linux, bash
+For bash, use `~/.bashrc` instead of `~/.zshrc`.
 
-```bash
-printf "alias container-pi='npx tsx %s/src/container-pi.ts'\n" "$(pwd)" >> ~/.bashrc
-source ~/.bashrc
-```
-
-### Current shell only
-
-```bash
-alias container-pi="npx tsx $(pwd)/src/container-pi.ts"
-```
-
-Then from any project:
-
-```bash
-cd /path/to/project
-container-pi
-```
-
-With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. New session opens a directory browser so you can choose the workspace, then asks whether to create a worktree or start directly in that folder. Worktree mode prompts for a worktree/branch name, creates it under `~/.container-pi/worktrees/<chosen-folder-name>/<worktree-name>`, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR**, **Publish branch**, and **Remove worktree + session**. Sessions whose workspace path is gone are shown as stale and can be removed from the submenu.
-
-Use **Prune missing worktrees** from the main menu to run `git worktree prune` for the current repository. The worktree root can still be overridden with `CONTAINER_PI_WORKTREE_ROOT`.
-
-## Commands
+## Usage
 
 ```bash
 container-pi                  # open the TUI
 container-pi tui              # open the TUI explicitly
-container-pi run              # start default project container, run pi in tmux, attach
-container-pi attach           # attach to existing tmux session
-container-pi shell            # open shell in same container
-container-pi stop             # remove default project container
-container-pi status           # show image/container/project info
-container-pi logs             # follow container logs
-container-pi list             # list running container-pi containers
+container-pi run              # start/attach the default project container
+container-pi attach           # attach to this project's container
+container-pi shell            # shell into this project's running container
+container-pi stop             # remove this project's container
+container-pi status           # show project container status
+container-pi logs             # follow project container logs
+container-pi list             # list container-pi containers
 container-pi build            # build image
 container-pi rebuild          # rebuild image with --no-cache
 ```
 
-Pi args pass through via `run`:
+Pass Pi args through `run`:
 
 ```bash
 container-pi run --model sonnet:high
@@ -121,27 +86,152 @@ container-pi run -p "summarize this repo"
 container-pi run --offline
 ```
 
-If you prefer the old no-TUI behavior:
+Prefer no-TUI behavior?
 
 ```bash
 CONTAINER_PI_NO_TUI=1 container-pi
 ```
 
-Detach from tmux with `Ctrl-b d`.
+Detach from tmux with:
 
-Directory browser keys:
+```text
+Ctrl-b d
+```
 
-- `←` focuses the higher-level menu
-- `Enter` on a directory descends into it
-- `Enter` on `✓ Use this directory` starts a new session there
-- `Backspace` goes up one directory
-- `~` jumps to your home directory
-- `/` jumps to filesystem root
-- `Esc` returns to the sessions list
+## TUI flow
+
+### Sessions
+
+Open **Sessions** to see:
+
+```text
++ New session
+existing sessions...
+```
+
+Choosing **New session**:
+
+1. Opens a directory browser.
+2. Choose a workspace folder.
+3. Choose one of:
+   ```text
+   Let's do it in a worktree      # default
+   Life's too short, Yolo It
+   ```
+4. Worktree mode asks for a worktree/branch name.
+5. The worktree is created and mounted into the container at `/workspace`.
+
+Worktrees are created under:
+
+```text
+~/.container-pi/worktrees/<chosen-folder-name>/<worktree-name>
+```
+
+For example:
+
+```text
+~/.container-pi/worktrees/my-app/pi-session-on-2026-05-07-11-42-09
+```
+
+### Existing session actions
+
+Normal sessions show:
+
+```text
+Attach
+Stop/remove
+```
+
+Sessions running from linked Git worktrees also show:
+
+```text
+Generate PR
+Publish branch
+Remove worktree + session
+```
+
+Stale sessions whose workspace path is missing are marked as stale and show:
+
+```text
+Remove stale session
+```
+
+### Cleanup
+
+Use **Prune missing worktrees** from the main menu to run:
+
+```bash
+git worktree prune
+```
+
+for the current repository.
+
+### Navigation
+
+```text
+↑/↓ or j/k   select
+Enter        run/select
+←            focus the higher-level menu
+Esc          back/cancel
+q            quit
+```
+
+Directory browser shortcuts:
+
+```text
+Enter on a directory            descend
+Enter on ✓ Use this directory   choose folder
+Backspace                       go up
+~                               jump home
+/                               jump root
+```
+
+## Mounts
+
+The selected workspace is mounted read-write:
+
+```text
+<selected workspace> -> /workspace
+```
+
+For auth/config reuse, these host folders are also mounted:
+
+```text
+~/.pi      -> /home/pi/.pi
+~/.agents  -> /home/pi/.agents
+~/.codex   -> /home/pi/.codex
+~/.claude  -> /home/pi/.claude
+```
+
+Optional mounts, when present:
+
+```text
+~/.ssh        -> /home/pi/.ssh         read-only
+~/.gitconfig  -> /home/pi/.gitconfig   read-only
+~/.npm        -> /home/pi/.npm         read-write
+```
+
+Security note: these folders may contain credentials/tokens. Only use images you trust.
+
+## Worktrees
+
+By default, worktrees live in a durable host path:
+
+```text
+~/.container-pi/worktrees
+```
+
+Override with:
+
+```bash
+CONTAINER_PI_WORKTREE_ROOT=/some/path container-pi
+```
+
+Worktree sessions mount only the worktree into the container. The original/base checkout is not mounted unless it is inside the selected worktree path.
 
 ## Hooks
 
-`container-pi` runs optional bash hooks from both of these locations, in this order:
+`container-pi` runs optional bash hooks from both project and global locations, in this order:
 
 ```text
 <project>/.container-pi/hooks/<hook>
@@ -191,3 +281,9 @@ CONTAINER_PI_WORKTREE_ROOT=~/.container-pi/worktrees
 ```
 
 The wrapper also forwards common provider keys like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, AWS env vars, etc.
+
+## Why TypeScript/tsx?
+
+A TypeScript wrapper is nicer than shell for Linux/macOS portability. It avoids `sed`/`readlink`/`sha1sum` differences, gives cleaner argument handling, and is easier to extend.
+
+There is still a small Node entrypoint inside the image because the container needs to create a Linux user matching your host UID/GID, start `tmux`, and keep the container alive.
