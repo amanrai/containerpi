@@ -357,8 +357,8 @@ function safeWorktreeName(name: string) {
   return name.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "worktree";
 }
 
-function defaultWorktreePath(repoRoot: string, branch: string) {
-  return resolve(worktreeRoot(), `${basename(repoRoot)}-${safeWorktreeName(branch)}`);
+function defaultWorktreePath(projectDir: string, name: string) {
+  return resolve(worktreeRoot(), basename(resolve(projectDir)), safeWorktreeName(name));
 }
 
 function startWorktreeSession(repoRoot: string, branch: string, worktreePath: string, sessionName: string) {
@@ -503,6 +503,26 @@ function tui(reopenSessionName?: string) {
     },
   });
 
+  const sessionMode = blessed.list({
+    parent: box,
+    top: 11,
+    left: "55%",
+    width: "42%",
+    height: 6,
+    keys: true,
+    mouse: true,
+    vi: true,
+    hidden: true,
+    border: "line",
+    label: " new session mode ",
+    items: ["Let's do it in a worktree", "Life's too short, Yolo It"],
+    style: {
+      border: { fg: "yellow" },
+      selected: { bg: "yellow", fg: "black", bold: true },
+      item: { fg: "white" },
+    },
+  });
+
   const hookConfig = blessed.box({
     parent: box,
     top: 11,
@@ -552,7 +572,15 @@ function tui(reopenSessionName?: string) {
 
   function hideBrowser() {
     browser.hide();
+    sessionMode.hide();
     sessionList.focus();
+    screen.render();
+  }
+
+  function hideSessionMode() {
+    sessionMode.hide();
+    browser.show();
+    browser.focus();
     screen.render();
   }
 
@@ -564,6 +592,7 @@ function tui(reopenSessionName?: string) {
 
   function hideSessions() {
     browser.hide();
+    sessionMode.hide();
     sessionActions.hide();
     sessionList.hide();
     list.focus();
@@ -578,6 +607,7 @@ function tui(reopenSessionName?: string) {
 
   function showHookConfig() {
     browser.hide();
+    sessionMode.hide();
     sessionActions.hide();
     sessionList.hide();
     hookConfig.show();
@@ -687,13 +717,27 @@ function tui(reopenSessionName?: string) {
     });
   }
 
-  function startSessionInWorktree() {
-    const root = gitRepoRoot(cwd);
-    if (!root) return showMessage("not a git repo", "Start session in worktree requires running container-pi inside a Git repository.");
-    ask("worktree branch", "agent/work", branch => {
-      const worktreePath = defaultWorktreePath(root, branch);
-      const name = newSessionName(worktreePath);
-      leaveAnd(() => startWorktreeSession(root, branch, worktreePath, name), true, name);
+  function chooseSessionMode(projectDir: string) {
+    browser.hide();
+    sessionMode.select(0);
+    sessionMode.show();
+    sessionMode.focus();
+    screen.render();
+
+    sessionMode.removeAllListeners("select");
+    sessionMode.on("select", (_item, index) => {
+      if (index === 1) {
+        const name = newSessionName(projectDir);
+        return leaveAnd(() => startNamed(name, [], projectDir), true, name);
+      }
+
+      const root = gitRepoRoot(projectDir);
+      if (!root) return showMessage("not a git repo", "Worktree mode requires the selected folder to be inside a Git repository. Choose Yolo It to start directly in this folder.");
+      ask("worktree name", "agent/work", worktreeName => {
+        const worktreePath = defaultWorktreePath(projectDir, worktreeName);
+        const name = newSessionName(worktreePath);
+        leaveAnd(() => startWorktreeSession(root, worktreeName, worktreePath, name), true, name);
+      });
     });
   }
 
@@ -715,7 +759,7 @@ function tui(reopenSessionName?: string) {
 
     browser.removeAllListeners("select");
     browser.on("select", (_item, index) => {
-      if (index === 0) return leaveAnd(() => startNamed(newSessionName(current), [], current));
+      if (index === 0) return chooseSessionMode(current);
       if (index === 1) {
         current = resolve(current, "..");
         return renderBrowser();
@@ -746,11 +790,11 @@ function tui(reopenSessionName?: string) {
 
   function showSessions() {
     browser.hide();
+    sessionMode.hide();
     sessionActions.hide();
     const sessions = listSessions();
     const labels = [
       "+ New session",
-      "+ Start session in worktree",
       ...sessions.map(s => `${s.name}  ${s.status}${s.project ? `  ${s.project}` : ""}`),
     ];
     sessionList.setItems(labels);
@@ -761,8 +805,7 @@ function tui(reopenSessionName?: string) {
     sessionList.removeAllListeners("select");
     sessionList.on("select", (_item, index) => {
       if (index === 0) return showWorkspaceBrowser(cwd);
-      if (index === 1) return startSessionInWorktree();
-      const session = sessions[index - 2];
+      const session = sessions[index - 1];
       if (session) showSessionActions(session);
     });
   }
@@ -770,6 +813,7 @@ function tui(reopenSessionName?: string) {
   sessionList.key(["escape"], hideSessions);
   sessionActions.key(["escape"], hideSessionActions);
   browser.key(["escape"], hideBrowser);
+  sessionMode.key(["escape"], hideSessionMode);
   hookConfig.key(["escape"], hideHookConfig);
 
   list.on("select", (_item, index) => {
@@ -786,10 +830,20 @@ function tui(reopenSessionName?: string) {
   });
 
   screen.key(["escape"], () => {
-    if (!browser.hidden) hideBrowser();
+    if (!sessionMode.hidden) hideSessionMode();
+    else if (!browser.hidden) hideBrowser();
     else if (!sessionActions.hidden) hideSessionActions();
     else if (!sessionList.hidden) hideSessions();
     else if (!hookConfig.hidden) hideHookConfig();
+  });
+
+  screen.key(["left"], () => {
+    if (!sessionMode.hidden) browser.focus();
+    else if (!browser.hidden) sessionList.focus();
+    else if (!sessionActions.hidden) sessionList.focus();
+    else if (!sessionList.hidden) list.focus();
+    else if (!hookConfig.hidden) list.focus();
+    screen.render();
   });
 
   screen.key(["q", "C-c"], () => {
@@ -803,7 +857,7 @@ function tui(reopenSessionName?: string) {
     const sessions = listSessions();
     const index = sessions.findIndex(s => s.name === reopenSessionName);
     if (index >= 0) {
-      sessionList.select(index + 2);
+      sessionList.select(index + 1);
       showSessionActions(sessions[index]);
     }
   } else {

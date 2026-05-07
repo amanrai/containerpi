@@ -93,7 +93,7 @@ cd /path/to/project
 container-pi
 ```
 
-With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session** and **Start session in worktree**. New session opens a directory browser so you can choose the workspace. Worktree session prompts for a branch name, creates a Git worktree under the configured worktree path, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
+With no arguments, `container-pi` opens a small terminal UI. Choose **Sessions** to see existing sessions plus **New session**. New session opens a directory browser so you can choose the workspace, then asks whether to create a worktree or start directly in that folder. Worktree mode prompts for a worktree/branch name, creates it under `<configured-worktree-root>/<chosen-folder-name>/<worktree-name>`, and starts Pi there. Selecting an existing session opens a second menu with **Attach** and **Stop/remove**; sessions running from a linked Git worktree also show **Generate PR** and **Publish branch**.
 
 Use **Configure worktree path** from the main menu to set where new worktrees are created. The default is `/tmp/container-pi/worktrees`.
 
@@ -131,6 +131,7 @@ Detach from tmux with `Ctrl-b d`.
 
 Directory browser keys:
 
+- `←` focuses the higher-level menu
 - `Enter` on a directory descends into it
 - `Enter` on `✓ Use this directory` starts a new session there
 - `Backspace` goes up one directory
