@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash git openssh-client ca-certificates curl \
     ripgrep fd-find python3 python3-pip \
-    tini gosu sudo tmux procps less nano vim \
+    tini gosu sudo tmux ncurses-term procps less nano vim \
   && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /usr/local/bin

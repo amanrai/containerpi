@@ -30,6 +30,10 @@ process.env.FORCE_COLOR = "1";
 for (const dir of [".pi", ".agents", ".codex", ".claude"]) {
   mkdirSync(`${userHome}/${dir}`, { recursive: true });
 }
+
+const tmuxConf = `${userHome}/.tmux.conf`;
+writeFileSync(tmuxConf, `set -g default-terminal "tmux-256color"\nset -as terminal-features ",xterm-256color:RGB"\nset -as terminal-features ",tmux-256color:RGB"\nset -as terminal-overrides ",xterm-256color:Tc"\nset -g allow-passthrough on\nset -g set-clipboard on\n`);
+try { chownSync(tmuxConf, Number(uid), Number(gid)); } catch {}
 // Do not chown -R $HOME here. On macOS/Docker Desktop these config dirs are
 // bind mounts from the host, and recursive chown can be slow or fail in odd ways.
 // The mounted files only need to be readable/writable through Docker's file
@@ -43,11 +47,11 @@ function shellQuote(s) {
 }
 
 const commandFile = "/tmp/container-pi-command.sh";
-writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\nexport TERM=xterm-256color\nexport COLORTERM=truecolor\nexport FORCE_COLOR=1\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
+writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\nexport COLORTERM=truecolor\nexport FORCE_COLOR=1\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
 chmodSync(commandFile, 0o755);
 try { chownSync(commandFile, Number(uid), Number(gid)); } catch {}
 try { rmSync(tmuxSocket, { force: true }); } catch {}
 
-const tmuxCmd = `tmux -2 -S ${shellQuote(tmuxSocket)} new-session -d -s ${shellQuote(tmuxSession)} ${shellQuote(commandFile)} && tail -f /dev/null`;
+const tmuxCmd = `tmux -2 -S ${shellQuote(tmuxSocket)} -f ${shellQuote(tmuxConf)} new-session -d -s ${shellQuote(tmuxSession)} ${shellQuote(commandFile)} && tail -f /dev/null`;
 const child = spawn("gosu", [userName, "bash", "-lc", tmuxCmd], { stdio: "inherit", env: process.env });
 child.on("exit", code => process.exit(code ?? 0));
