@@ -28,10 +28,13 @@ process.env.COLORTERM = "truecolor";
 process.env.FORCE_COLOR = "1";
 process.env.LANG = "C.UTF-8";
 process.env.LC_ALL = "C.UTF-8";
+process.env.NPM_CONFIG_PREFIX = `${userHome}/.npm-global`;
+process.env.PATH = `${userHome}/.npm-global/bin:${process.env.PATH}`;
 
-for (const dir of [".pi", ".agents", ".codex", ".claude"]) {
+for (const dir of [".pi", ".agents", ".codex", ".claude", ".npm-global"]) {
   mkdirSync(`${userHome}/${dir}`, { recursive: true });
 }
+try { chownSync(`${userHome}/.npm-global`, Number(uid), Number(gid)); } catch {}
 
 const tmuxConf = `${userHome}/.tmux.conf`;
 writeFileSync(tmuxConf, `set -g default-terminal "tmux-256color"\nset -as terminal-features ",xterm-256color:RGB"\nset -as terminal-features ",tmux-256color:RGB"\nset -as terminal-overrides ",xterm-256color:Tc"\nset -g allow-passthrough on\nset -g set-clipboard on\n`);
@@ -49,7 +52,7 @@ function shellQuote(s) {
 }
 
 const commandFile = "/tmp/container-pi-command.sh";
-writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\nexport COLORTERM=truecolor\nexport FORCE_COLOR=1\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
+writeFileSync(commandFile, `#!/usr/bin/env bash\nset -uo pipefail\nexport COLORTERM=truecolor\nexport FORCE_COLOR=1\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\nexport NPM_CONFIG_PREFIX=${shellQuote(`${userHome}/.npm-global`)}\nexport PATH=${shellQuote(`${userHome}/.npm-global/bin`)}:\"$PATH\"\ncd /workspace\n${command.map(shellQuote).join(" ")}\nstatus=$?\necho\necho \"[container-pi] command exited with status $status\"\necho \"[container-pi] leaving this shell open so attach does not fail with: no sessions\"\nexec bash -l\n`);
 chmodSync(commandFile, 0o755);
 try { chownSync(commandFile, Number(uid), Number(gid)); } catch {}
 try { rmSync(tmuxSocket, { force: true }); } catch {}

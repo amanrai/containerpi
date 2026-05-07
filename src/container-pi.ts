@@ -201,7 +201,7 @@ function attachContainer(name: string) {
   run(engine, [
     "exec", "-it", name,
     "bash", "-lc",
-    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 LANG=C.UTF-8 LC_ALL=C.UTF-8; exec gosu \"$u\" tmux -2 -S ${tmuxSocket} attach -t ${tmuxSession}`
+    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); h=$(getent passwd \"$HOST_UID\" | cut -d: -f6); export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 LANG=C.UTF-8 LC_ALL=C.UTF-8 NPM_CONFIG_PREFIX=\"$h/.npm-global\" PATH=\"$h/.npm-global/bin:$PATH\"; exec gosu \"$u\" tmux -2 -S ${tmuxSocket} attach -t ${tmuxSession}`
   ]);
   runHooks("session-detach", { container: name, projectDir });
 }
@@ -222,7 +222,7 @@ function shell() {
   run(engine, [
     "exec", "-it", containerName,
     "bash", "-lc",
-    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); export LANG=C.UTF-8 LC_ALL=C.UTF-8 COLORTERM=truecolor FORCE_COLOR=1; exec gosu \"$u\" bash -l`
+    `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); h=$(getent passwd \"$HOST_UID\" | cut -d: -f6); export LANG=C.UTF-8 LC_ALL=C.UTF-8 COLORTERM=truecolor FORCE_COLOR=1 NPM_CONFIG_PREFIX=\"$h/.npm-global\" PATH=\"$h/.npm-global/bin:$PATH\"; exec gosu \"$u\" bash -l`
   ]);
 }
 
