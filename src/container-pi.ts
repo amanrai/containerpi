@@ -653,7 +653,7 @@ function tui(reopenSessionName?: string) {
       parent: form,
       top: 0,
       left: 2,
-      content: "Edit value, then press Enter to accept. Esc cancels.",
+      content: "Enter to accept, Esc cancels.",
       style: { fg: "gray" },
     });
     const input = blessed.textbox({
