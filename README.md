@@ -15,6 +15,18 @@ Built with [Pi](https://pi.dev), but in no way associated with the builders of t
 
 Run `pi` inside a per-project Linux container, with the current folder mounted read-write and the live Pi UI running inside tmux.
 
+## Prerequisite: set up Pi locally first
+
+Before using `container-pi`, install and run the Pi Coding Agent locally at least once and log in to your subscription/provider there:
+
+```bash
+npm install -g @mariozechner/pi-coding-agent
+pi
+# inside pi: /login
+```
+
+`container-pi` mounts your local `~/.pi`, `~/.agents`, `~/.codex`, and `~/.claude` folders into the container, so it reuses your existing Pi auth, settings, skills, prompts, extensions, and sessions. If you have not logged in locally first, the container will not have your subscription/auth state.
+
 ## Why TypeScript/tsx?
 
 A TypeScript wrapper is nicer than shell for Linux/macOS portability. It avoids `sed`/`readlink`/`sha1sum` differences, gives cleaner argument handling, and is easier to extend.
