@@ -10,6 +10,7 @@ Built with [Pi](https://pi.dev), but not associated with the Pi Coding Agent pro
 - Mounts one selected project/worktree into the container at `/workspace`.
 - Reuses your local agent auth/config from `~/.pi`, `~/.agents`, `~/.codex`, and `~/.claude`.
 - Keeps Pi running in `tmux`, so you can detach and reattach.
+- Includes `starship` in the container for Starship-powered Pi footers/prompts.
 - Can create Git worktrees for isolated agent sessions.
 - Provides lifecycle hooks for project/global automation.
 

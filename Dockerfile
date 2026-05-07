@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tini gosu sudo tmux procps less nano vim \
   && rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /usr/local/bin
+
 RUN npm install -g @mariozechner/pi-coding-agent
 
 COPY entrypoint.mjs /usr/local/bin/container-pi-entrypoint.mjs
