@@ -136,6 +136,47 @@ Directory browser keys:
 - `/` jumps to filesystem root
 - `Esc` returns to the sessions list
 
+## Hooks
+
+`container-pi` runs optional bash hooks from both of these locations, in this order:
+
+```text
+<project>/.container-pi/hooks/<hook>
+<project>/.container-pi/hooks/<hook>.sh
+~/.config/container-pi/hooks/<hook>
+~/.config/container-pi/hooks/<hook>.sh
+```
+
+Supported hooks:
+
+```text
+pre-load          before loading/starting a session; non-zero exit aborts startup
+session-attach    immediately before attaching to tmux
+session-detach    after returning from tmux attach/detach
+shutdown          before removing a container-pi container
+```
+
+Hook environment:
+
+```bash
+CONTAINER_PI_HOOK       # hook name
+CONTAINER_PI_CONTAINER  # Docker/Podman container name
+CONTAINER_PI_PROJECT    # project/workspace path on the host
+CONTAINER_PI_IMAGE      # image name
+CONTAINER_PI_ENGINE     # docker or podman
+```
+
+Example:
+
+```bash
+mkdir -p .container-pi/hooks
+cat > .container-pi/hooks/session-detach <<'EOF'
+#!/usr/bin/env bash
+echo "detached from $CONTAINER_PI_CONTAINER in $CONTAINER_PI_PROJECT"
+EOF
+chmod +x .container-pi/hooks/session-detach
+```
+
 ## Environment
 
 ```bash

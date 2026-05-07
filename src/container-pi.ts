@@ -18,6 +18,7 @@ const containerName = process.env.CONTAINER_PI_NAME || `container-pi-${projectHa
 const tmuxSocket = "/tmp/container-pi.tmux";
 const tmuxSession = "pi";
 const terminalEnv = ["-e", "TERM=xterm-256color", "-e", "COLORTERM=truecolor", "-e", "FORCE_COLOR=1"];
+type HookName = "pre-load" | "session-attach" | "session-detach" | "shutdown";
 
 function findEngine(): string {
   for (const candidate of ["docker", "podman"]) {
@@ -39,6 +40,52 @@ function run(cmd: string, args: string[], opts: { capture?: boolean; check?: boo
 function output(cmd: string, args: string[]): string {
   const r = run(cmd, args, { capture: true, check: false });
   return r.status === 0 ? String(r.stdout).trim() : "";
+}
+
+function projectForContainer(name: string) {
+  return output(engine, ["inspect", "-f", "{{ index .Config.Labels \"container-pi.project\" }}", name]);
+}
+
+function hookFiles(hook: HookName, projectDir = cwd) {
+  const names = [hook, `${hook}.sh`];
+  const dirs = [
+    resolve(projectDir, ".container-pi", "hooks"),
+    resolve(home, ".config", "container-pi", "hooks"),
+  ];
+  const files: string[] = [];
+  for (const dir of dirs) {
+    for (const name of names) {
+      const file = resolve(dir, name);
+      if (existsSync(file) && statSync(file).isFile()) files.push(file);
+    }
+  }
+  return files;
+}
+
+function runHooks(hook: HookName, context: { container?: string; projectDir?: string } = {}, opts: { check?: boolean } = {}) {
+  const projectDir = resolve(context.projectDir || cwd);
+  const files = hookFiles(hook, projectDir);
+  for (const file of files) {
+    const res = spawnSync("bash", [file], {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        CONTAINER_PI_HOOK: hook,
+        CONTAINER_PI_CONTAINER: context.container || "",
+        CONTAINER_PI_PROJECT: projectDir,
+        CONTAINER_PI_IMAGE: image,
+        CONTAINER_PI_ENGINE: engine,
+      },
+    });
+    if (res.status !== 0) {
+      const message = `container-pi hook failed (${hook}): ${file}`;
+      if (opts.check) {
+        console.error(message);
+        process.exit(res.status ?? 1);
+      }
+      console.error(`${message}; continuing`);
+    }
+  }
 }
 
 function imageExists() {
@@ -128,8 +175,10 @@ function attachContainer(name: string) {
     console.error(`No such container: ${name}`);
     process.exit(1);
   }
+  const projectDir = projectForContainer(name) || cwd;
   const running = output(engine, ["inspect", "-f", "{{.State.Running}}", name]) === "true";
   if (!running) run(engine, ["start", name]);
+  runHooks("session-attach", { container: name, projectDir });
   if (!waitForTmuxSession(name)) {
     console.error(`tmux session '${tmuxSession}' did not start in container ${name}. Recent logs:`);
     run(engine, ["logs", "--tail", "80", name], { check: false });
@@ -140,6 +189,7 @@ function attachContainer(name: string) {
     "bash", "-lc",
     `u=$(getent passwd \"$HOST_UID\" | cut -d: -f1); export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1; exec gosu \"$u\" tmux -2 -S ${tmuxSocket} attach -t ${tmuxSession}`
   ]);
+  runHooks("session-detach", { container: name, projectDir });
 }
 
 function attach() {
@@ -164,6 +214,7 @@ function shell() {
 
 function startNamed(name: string, piArgs: string[], projectDir = cwd) {
   const resolvedProjectDir = resolve(projectDir);
+  runHooks("pre-load", { container: name, projectDir: resolvedProjectDir }, { check: true });
   ensureConfigDirs();
   if (!imageExists()) buildImage(false);
 
@@ -218,7 +269,10 @@ function status() {
 }
 
 function stopContainerName(name: string) {
-  if (containerExistsName(name)) run(engine, ["rm", "-f", name]);
+  if (containerExistsName(name)) {
+    runHooks("shutdown", { container: name, projectDir: projectForContainer(name) || cwd });
+    run(engine, ["rm", "-f", name]);
+  }
 }
 
 function stopContainer() {
