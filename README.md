@@ -141,6 +141,7 @@ Sessions running from linked Git worktrees also show:
 ```text
 Generate PR
 Publish branch
+Merge back dangerously
 Remove worktree + session
 ```
 
@@ -149,6 +150,8 @@ Stale sessions whose workspace path is missing are marked as stale and show:
 ```text
 Remove stale session
 ```
+
+`Merge back dangerously` checks out the original base branch in the main worktree and runs a local `git merge --no-ff <agent-branch>`. After a successful merge, it asks whether to push the base branch to `origin`.
 
 ### Cleanup
 

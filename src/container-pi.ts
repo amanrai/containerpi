@@ -226,7 +226,7 @@ function shell() {
   ]);
 }
 
-function startNamed(name: string, piArgs: string[], projectDir = cwd) {
+function startNamed(name: string, piArgs: string[], projectDir = cwd, labels: Record<string, string> = {}) {
   const resolvedProjectDir = resolve(projectDir);
   runHooks("pre-load", { container: name, projectDir: resolvedProjectDir }, { check: true });
   ensureConfigDirs();
@@ -240,6 +240,7 @@ function startNamed(name: string, piArgs: string[], projectDir = cwd) {
     "--name", name,
     "--label", `container-pi.project=${resolvedProjectDir}`,
     "--label", `container-pi.created=${new Date().toISOString()}`,
+    ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
     ...terminalEnv,
     "-e", `HOST_UID=${process.getuid?.() ?? 1000}`,
     "-e", `HOST_GID=${process.getgid?.() ?? 1000}`,
@@ -298,16 +299,38 @@ function logs() {
   run(engine, ["logs", "-f", containerName]);
 }
 
-type SessionInfo = { name: string; image: string; status: string; project: string };
+type SessionInfo = {
+  name: string;
+  image: string;
+  status: string;
+  project: string;
+  worktree: string;
+  repoRoot: string;
+  branch: string;
+  baseBranch: string;
+  baseCommit: string;
+  remote: string;
+};
 
 function listSessions(): SessionInfo[] {
-  const format = "{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Label \"container-pi.project\"}}";
+  const format = "{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Label \"container-pi.project\"}}\\t{{.Label \"container-pi.worktree\"}}\\t{{.Label \"container-pi.repo-root\"}}\\t{{.Label \"container-pi.branch\"}}\\t{{.Label \"container-pi.base-branch\"}}\\t{{.Label \"container-pi.base-commit\"}}\\t{{.Label \"container-pi.remote\"}}";
   const r = run(engine, ["ps", "-a", "--filter", "name=container-pi-", "--format", format], { capture: true, check: false });
   const text = r.status === 0 ? String(r.stdout).trim() : "";
   if (!text) return [];
   return text.split("\n").map(line => {
-    const [name = "", image = "", status = "", project = ""] = line.split("\t");
-    return { name, image, status, project };
+    const [
+      name = "",
+      image = "",
+      status = "",
+      project = "",
+      worktree = "",
+      repoRoot = "",
+      branch = "",
+      baseBranch = "",
+      baseCommit = "",
+      remote = "",
+    ] = line.split("\t");
+    return { name, image, status, project, worktree, repoRoot, branch, baseBranch, baseCommit, remote };
   }).filter(s => s.name.startsWith("container-pi-"));
 }
 
@@ -335,6 +358,14 @@ function gitRepoRoot(projectDir: string) {
 
 function gitBranch(projectDir: string) {
   return gitOutput(projectDir, ["branch", "--show-current"]);
+}
+
+function gitRemote(projectDir: string) {
+  return gitOutput(projectDir, ["remote", "get-url", "origin"]);
+}
+
+function confirmDangerous(message: string) {
+  return run("bash", ["-lc", `read -r -p ${JSON.stringify(message + " [y/N] ")} ans; [[ $ans =~ ^[Yy]$|^[Yy][Ee][Ss]$ ]]`], { check: false }).status === 0;
 }
 
 function worktreePaths(projectDir: string) {
@@ -391,9 +422,20 @@ function defaultWorktreePath(projectDir: string, name: string) {
 }
 
 function startWorktreeSession(repoRoot: string, branch: string, worktreePath: string, sessionName: string) {
+  const resolvedRepoRoot = resolve(repoRoot);
+  const baseBranch = gitBranch(resolvedRepoRoot) || "HEAD";
+  const baseCommit = gitOutput(resolvedRepoRoot, ["rev-parse", "HEAD"]);
+  const remote = gitRemote(resolvedRepoRoot);
   mkdirSync(dirname(resolve(worktreePath)), { recursive: true });
-  run("git", ["-C", repoRoot, "worktree", "add", "-b", branch, worktreePath]);
-  startNamed(sessionName, [], worktreePath);
+  run("git", ["-C", resolvedRepoRoot, "worktree", "add", "-b", branch, worktreePath]);
+  startNamed(sessionName, [], worktreePath, {
+    "container-pi.worktree": "true",
+    "container-pi.repo-root": resolvedRepoRoot,
+    "container-pi.branch": branch,
+    "container-pi.base-branch": baseBranch,
+    "container-pi.base-commit": baseCommit,
+    "container-pi.remote": remote,
+  });
 }
 
 function publishBranch(projectDir: string) {
@@ -403,6 +445,42 @@ function publishBranch(projectDir: string) {
     process.exit(1);
   }
   run("git", ["-C", projectDir, "push", "-u", "origin", branch]);
+}
+
+function mergeBackDangerously(session: SessionInfo) {
+  const worktreePath = session.project;
+  const repoRoot = session.repoRoot || mainWorktree(worktreePath) || gitRepoRoot(worktreePath);
+  const branch = session.branch || gitBranch(worktreePath);
+  const baseBranch = session.baseBranch || gitBranch(repoRoot);
+
+  if (!repoRoot || !existsSync(repoRoot)) {
+    console.error(`Could not determine base repo root for ${worktreePath}`);
+    process.exit(1);
+  }
+  if (!branch) {
+    console.error(`Could not determine worktree branch for ${worktreePath}`);
+    process.exit(1);
+  }
+  if (!baseBranch || baseBranch === "HEAD") {
+    console.error(`Could not determine base branch for ${repoRoot}`);
+    process.exit(1);
+  }
+
+  console.log(`DANGEROUS MERGE BACK`);
+  console.log(`  repo:   ${repoRoot}`);
+  console.log(`  target: ${baseBranch}`);
+  console.log(`  source: ${branch}`);
+  if (session.baseCommit) console.log(`  base:   ${session.baseCommit}`);
+  console.log("");
+
+  run("git", ["-C", repoRoot, "checkout", baseBranch]);
+  run("git", ["-C", repoRoot, "merge", "--no-ff", branch]);
+
+  if (confirmDangerous(`Push ${baseBranch} to origin?`)) {
+    run("git", ["-C", repoRoot, "push", "origin", baseBranch]);
+  } else {
+    console.log(`Not pushed. Inspect and push manually with: git -C ${repoRoot} push origin ${baseBranch}`);
+  }
 }
 
 function generatePr(projectDir: string) {
@@ -718,7 +796,7 @@ function tui(reopenSessionName?: string) {
     const actions = missing
       ? ["Remove stale session"]
       : linkedWorktree
-        ? ["Attach", "Generate PR", "Publish branch", "Remove worktree + session", "Stop/remove"]
+        ? ["Attach", "Generate PR", "Publish branch", "Merge back dangerously", "Remove worktree + session", "Stop/remove"]
         : ["Attach", "Stop/remove"];
     sessionActions.setItems(actions);
     sessionActions.height = actions.length + 2;
@@ -733,6 +811,7 @@ function tui(reopenSessionName?: string) {
         case "Attach": leaveAnd(() => attachContainer(session.name), true, session.name); break;
         case "Generate PR": leaveAnd(() => generatePr(session.project), true, session.name); break;
         case "Publish branch": leaveAnd(() => publishBranch(session.project), true, session.name); break;
+        case "Merge back dangerously": leaveAnd(() => mergeBackDangerously(session), true, session.name); break;
         case "Remove worktree + session": leaveAnd(() => removeWorktreeAndSession(session)); break;
         case "Remove stale session":
         case "Stop/remove":
